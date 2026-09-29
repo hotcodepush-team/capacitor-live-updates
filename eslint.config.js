@@ -11,6 +11,16 @@ export default defineConfig(
   importX.flatConfigs.recommended,
   importX.flatConfigs.typescript,
   {
+    files: ['benchmarks/**/*.mjs'],
+    languageOptions: {
+      globals: {
+        console: 'readonly',
+        process: 'readonly',
+        setTimeout: 'readonly',
+      },
+    },
+  },
+  {
     rules: {
       '@typescript-eslint/consistent-type-imports': 'error',
       'import-x/no-extraneous-dependencies': [
