@@ -1,0 +1,58 @@
+package com.hotcodepush.core
+
+import org.json.JSONObject
+
+/** An outcome event or check event, queued in the outbox until the events endpoint acknowledges it. */
+data class DeviceEvent(
+    val type: String,
+    val releaseId: String? = null,
+    val bundleId: String? = null,
+    val status: String? = null,
+    val reason: String? = null,
+    val condition: ConditionType? = null,
+    val bytes: Long? = null,
+    val packKind: String? = null,
+    val fromReleaseId: String? = null,
+    val toReleaseId: String? = null,
+) {
+    fun toJson(): JSONObject = JSONObject()
+        .put("type", type)
+        .putIfNotNull("releaseId", releaseId)
+        .putIfNotNull("bundleId", bundleId)
+        .putIfNotNull("status", status)
+        .putIfNotNull("reason", reason)
+        .putIfNotNull("condition", condition?.wire)
+        .putIfNotNull("bytes", bytes)
+        .putIfNotNull("packKind", packKind)
+        .putIfNotNull("fromReleaseId", fromReleaseId)
+        .putIfNotNull("toReleaseId", toReleaseId)
+
+    companion object {
+        fun checked(releaseId: String, status: SyncStatus, reason: SkippedReason? = null, condition: ConditionType? = null) =
+            DeviceEvent("checked", releaseId = releaseId, status = status.wire, reason = reason?.name, condition = condition)
+
+        fun downloaded(releaseId: String, bundleId: String, bytes: Long, packKind: PackKind) =
+            DeviceEvent("downloaded", releaseId = releaseId, bundleId = bundleId, bytes = bytes, packKind = packKind.wire)
+
+        fun applied(releaseId: String) = DeviceEvent("applied", releaseId = releaseId)
+
+        fun confirmed(releaseId: String) = DeviceEvent("confirmed", releaseId = releaseId)
+
+        fun failed(releaseId: String, reason: String) = DeviceEvent("failed", releaseId = releaseId, reason = reason)
+
+        fun rolledBack(fromReleaseId: String, toReleaseId: String?) = DeviceEvent("rolledBack", fromReleaseId = fromReleaseId, toReleaseId = toReleaseId)
+
+        fun fromJson(json: JSONObject) = DeviceEvent(
+            type = json.getString("type"),
+            releaseId = json.optNullableString("releaseId"),
+            bundleId = json.optNullableString("bundleId"),
+            status = json.optNullableString("status"),
+            reason = json.optNullableString("reason"),
+            condition = json.optNullableString("condition")?.let { wire -> ConditionType.entries.firstOrNull { it.wire == wire } },
+            bytes = if (json.isNull("bytes")) null else json.optLong("bytes"),
+            packKind = json.optNullableString("packKind"),
+            fromReleaseId = json.optNullableString("fromReleaseId"),
+            toReleaseId = json.optNullableString("toReleaseId"),
+        )
+    }
+}
