@@ -84,6 +84,17 @@ class FixtureTest {
     }
 
     @Test
+    fun shouldReadEveryResourceFileFixture() {
+        val cases = load("resource-files.json").getJSONArray("cases")
+        assertTrue(cases.length() > 0)
+        for (index in 0 until cases.length()) {
+            val case = cases.getJSONObject(index)
+            val configuration = Configuration.fromJson(case.getJSONObject("resourceFile"))
+            assertEquals(case.getString("name"), BundleManifest.fromJson(case.getJSONObject("embeddedBundleManifest")), configuration.embeddedBundleManifest)
+        }
+    }
+
+    @Test
     fun shouldReadAndWriteThePackFixture() {
         val fixture = load("packs.json")
         val pack = Base64.getDecoder().decode(fixture.getString("packBase64"))

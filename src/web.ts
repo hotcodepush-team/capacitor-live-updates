@@ -31,16 +31,15 @@ export class HotCodePushWeb extends WebPlugin implements HotCodePushPlugin {
   }
 
   async getDevice(): Promise<GetDeviceResult> {
-    // The shared `Platform` names the two native platforms; the web no-op reports the platform it is.
     return {
       attributes: {},
       binaryBuild: '',
       binaryVersion: '',
       channel: HotCodePushWeb.embeddedChannel,
-      fingerprint: '',
+      fingerprint: null,
       id: '',
       osVersion: '',
-      platform: 'web' as GetDeviceResult['platform'],
+      platform: 'web',
       sdkVersion: '',
     };
   }

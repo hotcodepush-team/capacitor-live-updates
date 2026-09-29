@@ -88,6 +88,15 @@ final class FixtureTests: XCTestCase {
         let cases: [Case]
     }
 
+    private struct ResourceFilesFile: Decodable {
+        struct Case: Decodable {
+            let name: String
+            let resourceFile: Configuration
+            let embeddedBundleManifest: BundleManifest
+        }
+        let cases: [Case]
+    }
+
     private struct PackFile: Decodable {
         struct Entry: Decodable {
             let content: String
@@ -129,6 +138,14 @@ final class FixtureTests: XCTestCase {
     func testShouldMatchEveryRolloutBucketFixture() throws {
         for testCase in try load("rollout-buckets.json", as: RolloutFile.self).cases {
             XCTAssertEqual(Hashing.rolloutBucket(deviceId: testCase.deviceId, releaseId: testCase.releaseId), testCase.bucket, "\(testCase.deviceId) \(testCase.releaseId)")
+        }
+    }
+
+    func testShouldReadEveryResourceFileFixture() throws {
+        let cases = try load("resource-files.json", as: ResourceFilesFile.self).cases
+        XCTAssertFalse(cases.isEmpty)
+        for testCase in cases {
+            XCTAssertEqual(testCase.resourceFile.embeddedBundleManifest, testCase.embeddedBundleManifest, testCase.name)
         }
     }
 
