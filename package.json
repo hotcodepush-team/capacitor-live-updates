@@ -1,0 +1,79 @@
+{
+  "name": "@hotcodepush/capacitor-live-updates",
+  "version": "0.0.0",
+  "description": "Capacitor live updates by HotCodePush: the plugin that delivers over-the-air updates to your Capacitor app",
+  "type": "module",
+  "license": "MIT",
+  "author": "Genz IT Solutions GmbH",
+  "homepage": "https://hotcodepush.com/capacitor-live-updates",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hotcodepush-team/capacitor-live-updates.git"
+  },
+  "bugs": {
+    "url": "https://github.com/hotcodepush-team/capacitor-live-updates/issues"
+  },
+  "keywords": [
+    "capacitor",
+    "capacitor-plugin",
+    "live updates",
+    "ota updates",
+    "over-the-air updates",
+    "code push",
+    "hot code push"
+  ],
+  "main": "dist/plugin.cjs.js",
+  "module": "dist/esm/index.js",
+  "types": "dist/esm/index.d.ts",
+  "unpkg": "dist/plugin.js",
+  "files": [
+    "android/src/main/",
+    "android/build.gradle",
+    "android/consumer-rules.pro",
+    "dist/",
+    "ios/Sources/",
+    "HotcodepushCapacitorLiveUpdates.podspec",
+    "Package.swift"
+  ],
+  "scripts": {
+    "build": "npm run clean && tsc && rollup -c rollup.config.mjs",
+    "clean": "rimraf ./dist",
+    "fmt": "eslint . --fix && prettier --write . && swiftlint --fix --quiet ios",
+    "lint": "eslint . && prettier --check . && swiftlint lint --quiet --strict ios",
+    "test": "npm run test:ios && npm run test:android",
+    "test:android": "cd android && ./gradlew test --console=plain",
+    "test:ios": "swift build --target HotCodePushCoreTests && swift test --skip-build",
+    "verify": "npm run lint && npm run build && npm run test",
+    "verify:android": "cd android && ./gradlew build test --console=plain",
+    "verify:ios": "npm run test:ios && xcodebuild -scheme HotcodepushCapacitorLiveUpdates -destination generic/platform=iOS -quiet build"
+  },
+  "devDependencies": {
+    "@capacitor/android": "8.5.2",
+    "@capacitor/cli": "8.5.2",
+    "@capacitor/core": "8.5.2",
+    "@capacitor/ios": "8.5.2",
+    "@eslint/js": "10.0.1",
+    "eslint": "10.11.0",
+    "eslint-import-resolver-typescript": "4.4.5",
+    "eslint-plugin-import-x": "4.17.1",
+    "prettier": "3.9.8",
+    "rimraf": "6.1.2",
+    "rollup": "4.53.3",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.70.0"
+  },
+  "peerDependencies": {
+    "@capacitor/core": ">=7.0.0"
+  },
+  "capacitor": {
+    "ios": {
+      "src": "ios"
+    },
+    "android": {
+      "src": "android"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
