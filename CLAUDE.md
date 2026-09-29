@@ -37,7 +37,7 @@ Run `npm run fmt` before every commit.
 ## Dependencies during the build phase
 
 Consumers pin the preview builds pkg.pr.new publishes from `ci.yml` on every push and pull request, never npm: `npm install https://pkg.pr.new/hotcodepush-team/capacitor-live-updates/@hotcodepush/capacitor-live-updates@<sha>`, `@main` for the newest.
-The shared types come from `@hotcodepush/protocol` the same way, `https://pkg.pr.new/hotcodepush-team/protocol-js/@hotcodepush/protocol@<sha>`; until its first build exists `src/definitions.ts` carries the placeholder marked `TODO(protocol-js#2)`.
+The shared types come from `@hotcodepush/protocol` the same way, pinned to a commit: `https://pkg.pr.new/hotcodepush-team/protocol-js/@hotcodepush/protocol@<sha>` in `package.json`; a protocol change is a bump of that sha.
 
 ## Rules
 

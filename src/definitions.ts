@@ -1,147 +1,42 @@
 import type { PluginListenerHandle } from '@capacitor/core';
+import type {
+  CheckResult,
+  GetChannelResult,
+  GetDeviceResult,
+  GetStatusResult,
+  ReadyResult,
+  Release,
+  RollbackOptions,
+  RollbackReason,
+  SetAttributesOptions,
+  SetChannelOptions,
+  SetRestartAllowedOptions,
+  SyncOptions,
+  SyncResult,
+  SyncTrigger,
+} from '@hotcodepush/protocol';
 
-// TODO(protocol-js#2): these types are the shared definitions of sdk-api.md and move to
-// `@hotcodepush/protocol` the moment its pkg.pr.new build exists.
-
-export interface Release {
-  id: string;
-  number: number;
-  bundleId: string;
-  bundleVersion: string;
-  isMandatory: boolean;
-}
-
-export type InstallStrategy =
-  'next-start' | 'immediate' | 'on-resume' | 'manual';
-
-export type SyncTrigger = 'start' | 'resume' | 'interval' | 'call';
-
-export type ConditionType =
-  'binary' | 'runtime' | 'fingerprint' | 'os' | 'attribute' | 'device';
-
-export type SkippedReason =
-  | 'INCOMPATIBLE'
-  | 'NOT_TARGETED'
-  | 'NOT_IN_ROLLOUT'
-  | 'UNSUPPORTED_CONDITION'
-  | 'OLDER_THAN_BINARY'
-  | 'CHANNEL_PAUSED'
-  | 'SPENDING_CAP_REACHED'
-  | 'RELEASE_REVOKED'
-  | 'FAILED_BEFORE'
-  | 'DEBUG_BUILD'
-  | 'METERED_CONNECTION';
-
-export type FailedReason =
-  | 'OFFLINE'
-  | 'UNKNOWN_CHANNEL'
-  | 'INVALID_INDEX'
-  | 'INVALID_SIGNATURE'
-  | 'DOWNLOAD_FAILED'
-  | 'VERIFICATION_FAILED';
-
-export type RollbackReason = 'READY_TIMEOUT' | 'CRASHED' | 'REPORTED_BY_APP';
-
-export type SyncResult =
-  | { status: 'UP_TO_DATE'; release: Release | null }
-  | {
-      status: 'UPDATED';
-      release: Release;
-      notes: string | null;
-      installAt: 'now' | 'next-start' | 'on-resume' | 'manual';
-    }
-  | {
-      status: 'SKIPPED';
-      release: Release | null;
-      reason: SkippedReason;
-      condition?: ConditionType;
-    }
-  | {
-      status: 'FAILED';
-      release: Release | null;
-      reason: FailedReason;
-      message: string;
-    };
-
-export type CheckResult =
-  | { status: 'UP_TO_DATE'; release: Release | null }
-  | {
-      status: 'AVAILABLE';
-      release: Release;
-      notes: string | null;
-      downloadBytes: number | null;
-    }
-  | {
-      status: 'SKIPPED';
-      release: Release | null;
-      reason: SkippedReason;
-      condition?: ConditionType;
-    }
-  | {
-      status: 'FAILED';
-      release: Release | null;
-      reason: FailedReason;
-      message: string;
-    };
-
-export interface ReadyResult {
-  currentRelease: Release | null;
-  previousRelease: Release | null;
-  isRolledBack: boolean;
-  rollbackReason?: RollbackReason;
-}
-
-export interface GetStatusResult {
-  currentRelease: Release | null;
-  nextRelease: Release | null;
-  fallbackRelease: Release | null;
-  embeddedBundleId: string | null;
-  lastCheck: {
-    at: string;
-    trigger: SyncTrigger;
-    result: SyncResult | CheckResult;
-  } | null;
-  index: { sequence: number; fetchedAt: string } | null;
-  failedBundleIds: string[];
-  lastReportAt: string | null;
-}
-
-export interface GetChannelResult {
-  id: string;
-  name: string | null;
-  source: 'runtime' | 'config';
-}
-
-export type SetChannelOptions = { name: string } | { id: string } | null;
-
-export interface GetDeviceResult {
-  id: string;
-  platform: 'ios' | 'android' | 'web';
-  binaryVersion: string;
-  binaryBuild: string;
-  osVersion: string;
-  sdkVersion: string;
-  fingerprint: string | null;
-  channel: GetChannelResult;
-  attributes: Record<string, string>;
-}
-
-export type SetAttributesOptions = Record<string, string | null>;
-
-export interface RollbackOptions {
-  reason?: string;
-}
-
-export type NetworkPolicy = 'any' | 'unmetered';
-
-export interface SyncOptions {
-  installStrategy?: InstallStrategy;
-  network?: NetworkPolicy;
-}
-
-export interface SetRestartAllowedOptions {
-  allowed: boolean;
-}
+export type {
+  CheckResult,
+  ConditionType,
+  FailedReason,
+  GetChannelResult,
+  GetDeviceResult,
+  GetStatusResult,
+  InstallStrategy,
+  NetworkPolicy,
+  ReadyResult,
+  Release,
+  RollbackOptions,
+  RollbackReason,
+  SetAttributesOptions,
+  SetChannelOptions,
+  SetRestartAllowedOptions,
+  SkippedReason,
+  SyncOptions,
+  SyncResult,
+  SyncTrigger,
+} from '@hotcodepush/protocol';
 
 export interface SyncStartedEvent {
   trigger: SyncTrigger;
