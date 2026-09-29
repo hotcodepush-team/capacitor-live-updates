@@ -43,29 +43,32 @@ object VersionRange {
         }
     }
 
+    /**
+     * One comparator: an optional operator, optional whitespace, a version that may end in wildcards or be
+     * wildcards alone, then whitespace or the end; an alternative parses only when comparators cover it entirely.
+     */
+    private val comparatorPattern = Regex("""(>=|<=|>|<|=)?\s*(\d+(?:\.\d+)*(?:\.[xX*])*|[xX*](?:\.[xX*])*)(?:\s+|$)""")
+
     private fun parseAlternative(alternative: String): List<Comparator>? {
-        val parts = alternative.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
-        if (parts.isEmpty()) return null
-        return parts.flatMap { parseComparator(it) ?: return null }
+        val trimmed = alternative.trim()
+        if (trimmed.isEmpty()) return null
+        val comparators = mutableListOf<Comparator>()
+        var position = 0
+        while (position < trimmed.length) {
+            val match = comparatorPattern.matchAt(trimmed, position) ?: return null
+            if (match.value.isEmpty()) return null
+            comparators += parseComparator(match.groups[1]?.value, match.groupValues[2]) ?: return null
+            position = match.range.last + 1
+        }
+        return comparators
     }
 
-    private fun parseComparator(part: String): List<Comparator>? {
-        var op: String? = null
-        var rest = part
-        for (candidate in listOf(">=", "<=", ">", "<", "=")) {
-            if (rest.startsWith(candidate)) {
-                op = candidate
-                rest = rest.removePrefix(candidate)
-                break
-            }
-        }
-        val components = rest.trimStart().split('.')
-        if (!components.all { component -> component.isNotEmpty() && component.all { it in '0'..'9' || it == 'x' || it == 'X' || it == '*' } }) return null
-        val wildcardIndex = components.indexOfFirst { component -> component.all { it == 'x' || it == 'X' || it == '*' } }
+    private fun parseComparator(op: String?, version: String): List<Comparator>? {
+        val components = version.split('.')
+        val wildcardIndex = components.indexOfFirst { it == "x" || it == "X" || it == "*" }
         if (wildcardIndex != -1 && op != null) return null
         if (wildcardIndex == -1 && (op != null || components.size >= 3)) return listOf(Comparator(op ?: "=", components.map { it.toInt() }))
-        val fixed = components.take(if (wildcardIndex == -1) components.size else wildcardIndex).map { it.toInt() }
-        return intervalComparators(fixed)
+        return intervalComparators(components.take(if (wildcardIndex == -1) components.size else wildcardIndex).map { it.toInt() })
     }
 
     /** A partial or wildcard version as the interval it names: `1.2` and `1.2.x` are `>=1.2 <1.3`, `x` is everything. */

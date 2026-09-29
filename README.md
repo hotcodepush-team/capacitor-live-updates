@@ -4,14 +4,14 @@
 
 ## Installation
 
-Until the package is published, install the preview build pkg.pr.new publishes for every commit on `main`:
+Until the package is published, install the preview build pkg.pr.new publishes for every commit on `main`, pinned to a commit:
 
 ```sh
-npm install https://pkg.pr.new/hotcodepush-team/capacitor-live-updates/@hotcodepush/capacitor-live-updates@main
+npm install https://pkg.pr.new/hotcodepush-team/capacitor-live-updates/@hotcodepush/capacitor-live-updates@<sha>
 npx cap sync
 ```
 
-A commit's own build is `@<sha>` in place of `@main`; the preview comment on each commit names it.
+A consumer pins a commit and bumps it deliberately; the preview comment on each commit names its `<sha>`.
 
 The plugin reads `hotcodepush.json` from the app's resources, which `npx hotcodepush init` writes and the embed step carries into every native build.
 

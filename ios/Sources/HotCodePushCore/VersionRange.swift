@@ -50,34 +50,36 @@ public enum VersionRange {
         }
     }
 
+    /// One comparator: an optional operator, optional whitespace, a version that may end in wildcards or be
+    /// wildcards alone, then whitespace or the end; an alternative parses only when comparators cover it entirely.
+    private static let comparatorPattern = try! NSRegularExpression(pattern: #"(>=|<=|>|<|=)?\s*(\d+(?:\.\d+)*(?:\.[xX*])*|[xX*](?:\.[xX*])*)(?:\s+|$)"#)
+
     private static func parseAlternative(_ alternative: String) -> [Comparator]? {
-        let parts = alternative.split(whereSeparator: { $0.isWhitespace }).map(String.init)
-        guard !parts.isEmpty else { return nil }
+        let trimmed = alternative.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return nil }
+        let text = trimmed as NSString
         var comparators: [Comparator] = []
-        for part in parts {
-            guard let parsed = parseComparator(part) else { return nil }
+        var position = 0
+        while position < text.length {
+            guard let match = comparatorPattern.firstMatch(in: trimmed, options: [.anchored], range: NSRange(location: position, length: text.length - position)), match.range.location == position, match.range.length > 0 else {
+                return nil
+            }
+            let op = match.range(at: 1).location == NSNotFound ? nil : text.substring(with: match.range(at: 1))
+            guard let parsed = parseComparator(op: op, version: text.substring(with: match.range(at: 2))) else { return nil }
             comparators.append(contentsOf: parsed)
+            position = match.range.location + match.range.length
         }
         return comparators
     }
 
-    private static func parseComparator(_ part: String) -> [Comparator]? {
-        var op: String?
-        var rest = Substring(part)
-        for candidate in [">=", "<=", ">", "<", "="] where rest.hasPrefix(candidate) {
-            op = candidate
-            rest = rest.dropFirst(candidate.count)
-            break
-        }
-        let components = rest.drop(while: { $0.isWhitespace }).split(separator: ".", omittingEmptySubsequences: false).map(String.init)
-        guard components.allSatisfy({ !$0.isEmpty && $0.allSatisfy { ($0.isASCII && $0.isNumber) || $0 == "x" || $0 == "X" || $0 == "*" } }) else { return nil }
-        let wildcardIndex = components.firstIndex { $0.allSatisfy { $0 == "x" || $0 == "X" || $0 == "*" } }
+    private static func parseComparator(op: String?, version: String) -> [Comparator]? {
+        let components = version.split(separator: ".", omittingEmptySubsequences: false).map(String.init)
+        let wildcardIndex = components.firstIndex { $0 == "x" || $0 == "X" || $0 == "*" }
         if wildcardIndex != nil && op != nil { return nil }
         if wildcardIndex == nil && (op != nil || components.count >= 3) {
             return [Comparator(op: op ?? "=", version: components.compactMap(Int.init))]
         }
-        let fixed = components.prefix(wildcardIndex ?? components.count).compactMap(Int.init)
-        return intervalComparators(fixed)
+        return intervalComparators(components.prefix(wildcardIndex ?? components.count).compactMap(Int.init))
     }
 
     /// A partial or wildcard version as the interval it names: `1.2` and `1.2.x` are `>=1.2 <1.3`, `x` is everything.
