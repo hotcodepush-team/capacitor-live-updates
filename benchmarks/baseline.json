@@ -17,7 +17,7 @@
       "without": null,
       "added": null,
       "device": "Pixel_9_Pro emulator, Android 17 (API 37), 16 KB pages",
-      "note": "Not measured yet: on the measuring day the emulator's activity service failed under a host load average of 88 (Broken pipe), so no launch completed; rerun measure-cold-start.mjs and commit the numbers."
+      "note": "Not measured yet: on the measuring day the host sat at a load average of 50 to 90 and the emulator's services failed or the emulator died between variants (one with-plugin pass gave runs of 1307 to 3123 ms, unusable without its control); rerun measure-cold-start.mjs on a quiet host and commit the numbers."
     }
   },
   "ios": {

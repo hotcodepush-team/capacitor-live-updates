@@ -122,10 +122,17 @@ function summarize(samples) {
 }
 
 function adb(...commandArgs) {
-  return execFileSync('adb', ['-s', androidSerial, ...commandArgs], {
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'inherit'],
-  });
+  try {
+    return execFileSync('adb', ['-s', androidSerial, ...commandArgs], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'inherit'],
+      timeout: 60_000,
+    });
+  } catch (error) {
+    // `pidof` exits with 1 when no process runs, which is the answer the stop waits for.
+    if (commandArgs[1] === 'pidof') return '';
+    throw error;
+  }
 }
 
 function simctl(...commandArgs) {
