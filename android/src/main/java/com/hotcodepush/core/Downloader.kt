@@ -85,7 +85,7 @@ class Downloader(
         try {
             file.inputStream().buffered().use { input ->
                 PackReader.forEachEntry(input) { entry ->
-                    if (entry.sha256 in wanted) files.writeFile(Gzip.decompress(entry.body), entry.sha256)
+                    if (entry.sha256 in wanted) files.writeFile(Gzip.decompressIfCompressed(entry.body), entry.sha256)
                 }
             }
             return file.length()
@@ -104,7 +104,7 @@ class Downloader(
             throw DownloadFailure.DownloadFailed("The file ${file.path} could not be downloaded: ${exception.message}")
         }
         if (response.status != 200) throw DownloadFailure.DownloadFailed("HTTP ${response.status} for ${file.path}")
-        val content = runCatching { Gzip.decompress(response.body) }.getOrDefault(response.body)
+        val content = runCatching { Gzip.decompressIfCompressed(response.body) }.getOrDefault(response.body)
         try {
             files.writeFile(content, file.sha256)
         } catch (exception: HashMismatchException) {

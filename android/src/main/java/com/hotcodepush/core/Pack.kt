@@ -57,8 +57,6 @@ object PackWriter {
             entry.sha256.toByteArray(Charsets.US_ASCII).copyInto(header, 0)
             "%011o".format(entry.body.size).toByteArray(Charsets.US_ASCII).copyInto(header, 124)
             for (index in 148 until 156) header[index] = 0x20
-            "ustar".toByteArray(Charsets.US_ASCII).copyInto(header, 257)
-            "00".toByteArray(Charsets.US_ASCII).copyInto(header, 263)
             val checksum = header.sumOf { it.toInt() and 0xff }
             ("%06o".format(checksum) + "\u0000").toByteArray(Charsets.US_ASCII).copyInto(header, 148)
             output.write(header)
@@ -72,6 +70,11 @@ object PackWriter {
 
 /** Decodes the gzip bytes the bucket serves into the file's content. */
 object Gzip {
+    /** Gzip bytes carry the `1f 8b` magic; anything else is stored as it is. */
+    fun isCompressed(bytes: ByteArray): Boolean = bytes.size >= 2 && bytes[0] == 0x1f.toByte() && bytes[1] == 0x8b.toByte()
+
+    fun decompressIfCompressed(bytes: ByteArray): ByteArray = if (isCompressed(bytes)) decompress(bytes) else bytes
+
     fun decompress(bytes: ByteArray): ByteArray = if (bytes.isEmpty()) bytes else GZIPInputStream(ByteArrayInputStream(bytes)).use { it.readBytes() }
 
     fun compress(bytes: ByteArray): ByteArray = ByteArrayOutputStream().also { output -> GZIPOutputStream(output).use { it.write(bytes) } }.toByteArray()

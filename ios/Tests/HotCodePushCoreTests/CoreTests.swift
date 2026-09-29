@@ -198,7 +198,7 @@ final class CoreTests: XCTestCase {
         _ = await harness.core.ready()
         harness.publish([v2], sequence: 2, revoked: ["r1"], etag: "\"e2\"")
         let result = await harness.core.sync(trigger: .call)
-        XCTAssertEqual(result, .skipped(v2.release.release, reason: .releaseRevoked))
+        XCTAssertEqual(result, .skipped(nil, reason: .releaseRevoked))
         XCTAssertEqual(harness.loader.loaded.last, .some(nil))
         let status = await harness.core.status()
         XCTAssertNil(status.currentRelease)

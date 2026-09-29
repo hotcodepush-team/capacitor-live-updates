@@ -1,29 +1,37 @@
 import Foundation
 
-/// The facts a device evaluates an index against.
+/// What the device knows when it evaluates a channel index.
 public struct DeviceInfo: Equatable {
-    public let deviceId: String
-    public let binaryVersion: String
-    public let binaryBuild: String
-    public let osVersion: String
-    public let fingerprint: String?
+    /// The sequence of the index the device has already evaluated; an older index is ignored.
+    public let appliedIndexSequence: Int?
     public let attributes: [String: String]
+    public let binaryBuild: String
+    public let binaryVersion: String
+    /// The floor from the resource file: no release created before it is applied.
     public let builtAt: Date
-    public let reportedAt: Date?
-    public let failedBundleIds: [String]
+    /// The running release, or `nil` for the embedded bundle; only its id and number matter here.
     public let currentRelease: Release?
+    public let deviceId: String
+    public let failedBundleIds: [String]
+    public let fingerprint: String?
+    public let osVersion: String
+    /// The server time of the last acknowledged report, for the spending cap.
+    public let reportedAt: Date?
+    public let runtimeVersion: String?
 
-    public init(deviceId: String, binaryVersion: String, binaryBuild: String, osVersion: String, fingerprint: String?, attributes: [String: String], builtAt: Date, reportedAt: Date?, failedBundleIds: [String], currentRelease: Release?) {
-        self.deviceId = deviceId
-        self.binaryVersion = binaryVersion
-        self.binaryBuild = binaryBuild
-        self.osVersion = osVersion
-        self.fingerprint = fingerprint
+    public init(appliedIndexSequence: Int?, attributes: [String: String], binaryBuild: String, binaryVersion: String, builtAt: Date, currentRelease: Release?, deviceId: String, failedBundleIds: [String], fingerprint: String?, osVersion: String, reportedAt: Date?, runtimeVersion: String?) {
+        self.appliedIndexSequence = appliedIndexSequence
         self.attributes = attributes
+        self.binaryBuild = binaryBuild
+        self.binaryVersion = binaryVersion
         self.builtAt = builtAt
-        self.reportedAt = reportedAt
-        self.failedBundleIds = failedBundleIds
         self.currentRelease = currentRelease
+        self.deviceId = deviceId
+        self.failedBundleIds = failedBundleIds
+        self.fingerprint = fingerprint
+        self.osVersion = osVersion
+        self.reportedAt = reportedAt
+        self.runtimeVersion = runtimeVersion
     }
 }
 
@@ -37,95 +45,128 @@ public struct Skip: Equatable {
     }
 }
 
-/// What the device should do with an index.
-public enum Evaluation: Equatable {
-    /// Nothing newer than what runs.
-    case upToDate
-    /// Take this release: newer and eligible, or the eligible release below a revoked one.
-    case update(IndexRelease)
-    /// Return to the embedded bundle: the running release is revoked or the directive says so.
-    case revert(reason: SkippedReason)
-    /// A newer release exists and this device will not take it now.
-    case skipped(newest: IndexRelease, skip: Skip)
-    /// The whole index is off for this device: paused or beyond the cap.
-    case unavailable(reason: SkippedReason)
+/// The per-release verdict, the explanation behind the outcome and the probe's output.
+public struct ReleaseVerdict: Equatable {
+    public let release: IndexRelease
+    public let isEligible: Bool
+    public let reason: SkippedReason?
+    public let condition: ConditionType?
 }
 
-/// The shared evaluator: the same rules in TypeScript, Swift and Kotlin, proven equal by the fixture suite.
+/// The outcome for the device. On `SKIPPED` with `RELEASE_REVOKED`, the release is the one the device resolves to —
+/// `nil` for the embedded bundle; on every other `SKIPPED` it is the newest release the device will not take.
+public enum Evaluation: Equatable {
+    case upToDate(IndexRelease?)
+    case available(IndexRelease, isMandatory: Bool)
+    case skipped(IndexRelease?, reason: SkippedReason, condition: ConditionType?)
+}
+
+/// The device protocol's evaluation, the same rules as `@hotcodepush/protocol`'s, pinned by its fixture suite.
 public enum Evaluator {
+    private static let embeddedReleaseNumber = 0
+
     public static func evaluate(_ index: ChannelIndex, device: DeviceInfo) -> Evaluation {
+        let currentIndexRelease = device.currentRelease.flatMap { current in index.releases.first { $0.id == current.id } }
+        if let applied = device.appliedIndexSequence, index.sequence < applied {
+            return .upToDate(currentIndexRelease)
+        }
+        if isDeviceBeyondCap(index, device: device) {
+            return .skipped(nil, reason: .spendingCapReached, condition: nil)
+        }
+        let verdicts = index.releases.sorted { $0.number > $1.number }.map { verdict(for: $0, in: index, device: device) }
+        let currentNumber = device.currentRelease?.number ?? embeddedReleaseNumber
+        let isCurrentRevoked = device.currentRelease.map { isRevoked(id: $0.id, number: $0.number, in: index) } ?? false
+        let newerVerdict = verdicts.first { $0.release.number > currentNumber && $0.reason != .releaseRevoked }
+        let newerEligible = verdicts.first { $0.isEligible && $0.release.number > currentNumber }
+        let olderEligible = verdicts.first { $0.isEligible && $0.release.number < currentNumber }
         if index.isPaused {
-            return .unavailable(reason: .channelPaused)
-        }
-        if let cappedAt = index.cappedAt, device.reportedAt.map({ $0 > cappedAt }) ?? true {
-            return .unavailable(reason: .spendingCapReached)
-        }
-        let current = device.currentRelease
-        if let current = current, let directive = index.rollBackToEmbedded, current.number <= directive.aboveNumber {
-            return .revert(reason: .releaseRevoked)
-        }
-        let releases = index.releases.sorted { $0.number > $1.number }
-        if let current = current, index.revokedReleaseIds.contains(current.id) {
-            let older = releases.filter { $0.number < current.number }
-            for candidate in older where eligibility(of: candidate, in: index, device: device) == nil {
-                return .update(candidate)
+            if isCurrentRevoked {
+                return .skipped(olderEligible?.release, reason: .releaseRevoked, condition: nil)
             }
-            return .revert(reason: .releaseRevoked)
-        }
-        let newer = releases.filter { candidate in current.map { candidate.number > $0.number } ?? true }
-        var firstSkip: (IndexRelease, Skip)?
-        for candidate in newer {
-            if let skip = eligibility(of: candidate, in: index, device: device) {
-                if firstSkip == nil { firstSkip = (candidate, skip) }
-                continue
+            if let newer = newerVerdict {
+                return .skipped(newer.release, reason: .channelPaused, condition: nil)
             }
-            return .update(candidate)
+            return .upToDate(currentIndexRelease)
         }
-        if let (newest, skip) = firstSkip {
-            return .skipped(newest: newest, skip: skip)
+        if let target = newerEligible?.release {
+            return .available(target, isMandatory: isMandatoryTransitively(target, currentNumber: currentNumber, verdicts: verdicts))
         }
-        return .upToDate
+        if isCurrentRevoked {
+            return .skipped(olderEligible?.release, reason: .releaseRevoked, condition: nil)
+        }
+        if let newer = newerVerdict, let reason = newer.reason {
+            return .skipped(newer.release, reason: reason, condition: newer.condition)
+        }
+        return .upToDate(currentIndexRelease)
     }
 
-    /// `nil` when the device may take the release, else why not.
-    public static func eligibility(of release: IndexRelease, in index: ChannelIndex, device: DeviceInfo) -> Skip? {
-        if index.revokedReleaseIds.contains(release.id) {
-            return Skip(reason: .releaseRevoked)
+    public static func verdict(for release: IndexRelease, in index: ChannelIndex, device: DeviceInfo) -> ReleaseVerdict {
+        if isRevoked(id: release.id, number: release.number, in: index) {
+            return ReleaseVerdict(release: release, isEligible: false, reason: .releaseRevoked, condition: nil)
         }
         if release.createdAt < device.builtAt {
-            return Skip(reason: .olderThanBinary)
+            return ReleaseVerdict(release: release, isEligible: false, reason: .olderThanBinary, condition: nil)
         }
         if device.failedBundleIds.contains(release.bundleId) {
-            return Skip(reason: .failedBefore)
+            return ReleaseVerdict(release: release, isEligible: false, reason: .failedBefore, condition: nil)
         }
-        for condition in release.conditions {
-            if let skip = evaluate(condition, device: device) {
-                return skip
+        for condition in release.conditions where !isSatisfied(condition, device: device) {
+            guard let type = condition.type else {
+                return ReleaseVerdict(release: release, isEligible: false, reason: .unsupportedCondition, condition: nil)
             }
+            let reason: SkippedReason = (type == .attribute || type == .device) ? .notTargeted : .incompatible
+            return ReleaseVerdict(release: release, isEligible: false, reason: reason, condition: type)
         }
         if Hashing.rolloutBucket(deviceId: device.deviceId, releaseId: release.id) >= release.rollout {
-            return Skip(reason: .notInRollout)
+            return ReleaseVerdict(release: release, isEligible: false, reason: .notInRollout, condition: nil)
         }
-        return nil
+        return ReleaseVerdict(release: release, isEligible: true, reason: nil, condition: nil)
     }
 
-    static func evaluate(_ condition: Condition, device: DeviceInfo) -> Skip? {
+    /// Whether the device satisfies the condition; an unknown type never does.
+    public static func isSatisfied(_ condition: Condition, device: DeviceInfo) -> Bool {
         switch condition {
-        case .binary(let range):
-            return VersionRange(range)?.contains(device.binaryVersion) == true ? nil : Skip(reason: .incompatible, condition: .binary)
-        case .os(let range):
-            return VersionRange(range)?.contains(device.osVersion) == true ? nil : Skip(reason: .incompatible, condition: .os)
-        case .runtime:
-            return Skip(reason: .incompatible, condition: .runtime)
-        case .fingerprint(let hash):
-            return device.fingerprint == hash ? nil : Skip(reason: .incompatible, condition: .fingerprint)
-        case .device(let hashedIds):
-            return hashedIds.contains(Hashing.sha256Hex(device.deviceId)) ? nil : Skip(reason: .notTargeted, condition: .device)
         case .attribute(let key, let valueSha256):
-            let matches = device.attributes[key].map { Hashing.attributeHash(key: key, value: $0) == valueSha256 } ?? false
-            return matches ? nil : Skip(reason: .notTargeted, condition: .attribute)
+            return device.attributes[key].map { Hashing.attributeHash(key: key, value: $0) == valueSha256 } ?? false
+        case .binary(let range):
+            guard let version = resolveBinaryVersion(device) else { return false }
+            return VersionRange.isVersionInRange(version, range) == true
+        case .device(let hashedIds):
+            return hashedIds.contains(Hashing.deviceIdHash(device.deviceId))
+        case .fingerprint(let hash):
+            return device.fingerprint == hash
+        case .os(let range):
+            guard let version = VersionRange.parseVersion(device.osVersion) else { return false }
+            return VersionRange.isVersionInRange(version, range) == true
+        case .runtime(let version):
+            return device.runtimeVersion == version
         case .unknown:
-            return Skip(reason: .unsupportedCondition)
+            return false
         }
+    }
+
+    /// The binary version with the build number as its fourth component, when both are numbers.
+    static func resolveBinaryVersion(_ device: DeviceInfo) -> [Int]? {
+        guard let version = VersionRange.parseVersion(device.binaryVersion) else { return nil }
+        if let build = VersionRange.parseVersion(device.binaryBuild), build.count == 1 {
+            return version + build
+        }
+        return version
+    }
+
+    static func isDeviceBeyondCap(_ index: ChannelIndex, device: DeviceInfo) -> Bool {
+        guard let cappedAt = index.cappedAt else { return false }
+        guard let reportedAt = device.reportedAt else { return true }
+        return reportedAt >= cappedAt
+    }
+
+    /// A release is mandatory for the device when it or any release it skipped over is.
+    static func isMandatoryTransitively(_ target: IndexRelease, currentNumber: Int, verdicts: [ReleaseVerdict]) -> Bool {
+        return verdicts.contains { $0.release.isMandatory && $0.release.number > currentNumber && $0.release.number <= target.number }
+    }
+
+    static func isRevoked(id: String, number: Int, in index: ChannelIndex) -> Bool {
+        if index.revokedReleaseIds.contains(id) { return true }
+        return index.rollBackToEmbedded.map { number <= $0.aboveNumber } ?? false
     }
 }

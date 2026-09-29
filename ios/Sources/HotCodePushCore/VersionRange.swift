@@ -1,93 +1,90 @@
 import Foundation
 
-/// A dotted numeric version; missing components are zero, pre-release and build metadata are ignored.
-public struct Version: Comparable, Equatable {
-    public let components: [Int]
+/// The range subset the three evaluators share, over dotted numeric versions: comparators `>=`, `>`, `<=`, `<`, `=`,
+/// a bare version as equality, `x` or `*` wildcards and partial versions as intervals, alternatives joined by `||`.
+/// Anything else does not parse, and a condition that does not parse is not satisfied.
+public enum VersionRange {
+    private struct Comparator {
+        let op: String
+        let version: [Int]
+    }
 
-    public init?(_ text: String) {
-        let core = text.split(whereSeparator: { $0 == "-" || $0 == "+" }).first.map(String.init) ?? text
+    /// A version's numeric components; `nil` when the string is not a dotted number.
+    public static func parseVersion(_ value: String) -> [Int]? {
+        let components = value.trimmingCharacters(in: .whitespaces).split(separator: ".", omittingEmptySubsequences: false)
         var parsed: [Int] = []
-        for part in core.split(separator: ".", omittingEmptySubsequences: false) {
-            guard let number = Int(part) else { return nil }
+        for component in components {
+            guard !component.isEmpty, component.allSatisfy({ $0.isASCII && $0.isNumber }), let number = Int(component) else { return nil }
             parsed.append(number)
         }
-        guard !parsed.isEmpty, parsed.count <= 3 else { return nil }
-        components = parsed + Array(repeating: 0, count: 3 - parsed.count)
+        return parsed.isEmpty ? nil : parsed
     }
 
-    public static func < (lhs: Version, rhs: Version) -> Bool {
-        return lhs.components.lexicographicallyPrecedes(rhs.components)
-    }
-}
-
-/// The subset of npm's range syntax the three evaluators share: comparators, `x` wildcards, `||`.
-public struct VersionRange {
-    private enum Comparator {
-        case greaterOrEqual(Version)
-        case greater(Version)
-        case lessOrEqual(Version)
-        case less(Version)
-        case equal(Version)
-
-        func matches(_ version: Version) -> Bool {
-            switch self {
-            case .greaterOrEqual(let bound): return version >= bound
-            case .greater(let bound): return version > bound
-            case .lessOrEqual(let bound): return version <= bound
-            case .less(let bound): return version < bound
-            case .equal(let bound): return version == bound
-            }
-        }
-    }
-
-    private let alternatives: [[Comparator]]
-
-    public init?(_ text: String) {
+    /// Whether the version satisfies the range: `nil` when the range does not parse.
+    /// A comparator compares only as many components as it names, so `2.4.1` matches `2.4.1.57`.
+    public static func isVersionInRange(_ version: [Int], _ range: String) -> Bool? {
         var alternatives: [[Comparator]] = []
-        for alternative in text.components(separatedBy: "||") {
-            var comparators: [Comparator] = []
-            for token in alternative.split(separator: " ") {
-                guard let parsed = VersionRange.parse(String(token)) else { return nil }
-                comparators.append(contentsOf: parsed)
-            }
+        for alternative in range.components(separatedBy: "||") {
+            guard let comparators = parseAlternative(alternative) else { return nil }
             alternatives.append(comparators)
         }
-        self.alternatives = alternatives
+        return alternatives.contains { $0.allSatisfy { isSatisfied(version, $0) } }
     }
 
-    public func contains(_ version: Version) -> Bool {
-        return alternatives.contains { comparators in comparators.allSatisfy { $0.matches(version) } }
-    }
-
-    public func contains(_ text: String) -> Bool {
-        guard let version = Version(text) else { return false }
-        return contains(version)
-    }
-
-    private static func parse(_ token: String) -> [Comparator]? {
-        let operators: [(String, (Version) -> Comparator)] = [(">=", { .greaterOrEqual($0) }), ("<=", { .lessOrEqual($0) }), (">", { .greater($0) }), ("<", { .less($0) }), ("=", { .equal($0) })]
-        for (op, make) in operators where token.hasPrefix(op) {
-            guard let version = Version(String(token.dropFirst(op.count))) else { return nil }
-            return [make(version)]
+    private static func compare(_ left: [Int], _ right: [Int], length: Int) -> Int {
+        for index in 0..<length {
+            let difference = (index < left.count ? left[index] : 0) - (index < right.count ? right[index] : 0)
+            if difference != 0 { return difference }
         }
-        return wildcard(token)
+        return 0
     }
 
-    /// `2`, `2.x`, `2.*`, `2.4.x`: the range of every version with that prefix; `1.2.3` alone is exact.
-    private static func wildcard(_ token: String) -> [Comparator]? {
-        let parts = token.split(separator: ".", omittingEmptySubsequences: false).map(String.init)
-        let fixed = parts.prefix { $0 != "x" && $0 != "X" && $0 != "*" }
-        guard fixed.count > 0, fixed.count <= 3, fixed.allSatisfy({ Int($0) != nil }) else { return nil }
-        let numbers = fixed.compactMap(Int.init)
-        if numbers.count == 3 && parts.count == 3 {
-            guard let version = Version(token) else { return nil }
-            return [.equal(version)]
+    private static func isSatisfied(_ version: [Int], _ comparator: Comparator) -> Bool {
+        let order = compare(version, comparator.version, length: comparator.version.count)
+        switch comparator.op {
+        case "<": return order < 0
+        case "<=": return order <= 0
+        case "=": return order == 0
+        case ">": return order > 0
+        default: return order >= 0
         }
-        let lower = numbers + Array(repeating: 0, count: 3 - numbers.count)
-        var upper = lower
-        upper[numbers.count - 1] += 1
-        for index in numbers.count..<3 { upper[index] = 0 }
-        guard let lowerVersion = Version(lower.map(String.init).joined(separator: ".")), let upperVersion = Version(upper.map(String.init).joined(separator: ".")) else { return nil }
-        return [.greaterOrEqual(lowerVersion), .less(upperVersion)]
+    }
+
+    private static func parseAlternative(_ alternative: String) -> [Comparator]? {
+        let parts = alternative.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+        guard !parts.isEmpty else { return nil }
+        var comparators: [Comparator] = []
+        for part in parts {
+            guard let parsed = parseComparator(part) else { return nil }
+            comparators.append(contentsOf: parsed)
+        }
+        return comparators
+    }
+
+    private static func parseComparator(_ part: String) -> [Comparator]? {
+        var op: String?
+        var rest = Substring(part)
+        for candidate in [">=", "<=", ">", "<", "="] where rest.hasPrefix(candidate) {
+            op = candidate
+            rest = rest.dropFirst(candidate.count)
+            break
+        }
+        let components = rest.drop(while: { $0.isWhitespace }).split(separator: ".", omittingEmptySubsequences: false).map(String.init)
+        guard components.allSatisfy({ !$0.isEmpty && $0.allSatisfy { ($0.isASCII && $0.isNumber) || $0 == "x" || $0 == "X" || $0 == "*" } }) else { return nil }
+        let wildcardIndex = components.firstIndex { $0.allSatisfy { $0 == "x" || $0 == "X" || $0 == "*" } }
+        if wildcardIndex != nil && op != nil { return nil }
+        if wildcardIndex == nil && (op != nil || components.count >= 3) {
+            return [Comparator(op: op ?? "=", version: components.compactMap(Int.init))]
+        }
+        let fixed = components.prefix(wildcardIndex ?? components.count).compactMap(Int.init)
+        return intervalComparators(fixed)
+    }
+
+    /// A partial or wildcard version as the interval it names: `1.2` and `1.2.x` are `>=1.2 <1.3`, `x` is everything.
+    private static func intervalComparators(_ fixed: [Int]) -> [Comparator] {
+        guard !fixed.isEmpty else { return [] }
+        var upper = fixed
+        upper[upper.count - 1] += 1
+        return [Comparator(op: ">=", version: fixed), Comparator(op: "<", version: upper)]
     }
 }

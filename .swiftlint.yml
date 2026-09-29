@@ -1,6 +1,7 @@
 included:
   - ios
 disabled_rules:
+  - nesting
   - todo
   - function_body_length
   - line_length

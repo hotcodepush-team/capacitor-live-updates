@@ -10,10 +10,16 @@ object Hashing {
     /** `sha256(key + '\0' + value)`, the form an attribute condition carries. */
     fun attributeHash(key: String, value: String): String = sha256Hex(key + "\u0000" + value)
 
-    /** The rollout bucket: a stable hash of the device id and the release id into a hundred buckets. */
+    /** The hash a `device` condition lists for one device id. */
+    fun deviceIdHash(deviceId: String): String = sha256Hex(deviceId)
+
+    /** The rollout bucket: FNV-1a 32-bit over the UTF-8 bytes of the device id followed by the release id, modulo 100. */
     fun rolloutBucket(deviceId: String, releaseId: String): Int {
-        val digest = MessageDigest.getInstance("SHA-256").digest((deviceId + "\u0000" + releaseId).toByteArray(Charsets.UTF_8))
-        val value = ((digest[0].toLong() and 0xff) shl 24) or ((digest[1].toLong() and 0xff) shl 16) or ((digest[2].toLong() and 0xff) shl 8) or (digest[3].toLong() and 0xff)
-        return (value % 100).toInt()
+        var hash = 0x811c9dc5.toInt()
+        for (byte in (deviceId + releaseId).toByteArray(Charsets.UTF_8)) {
+            hash = hash xor (byte.toInt() and 0xff)
+            hash *= 0x01000193
+        }
+        return ((hash.toLong() and 0xffffffffL) % 100).toInt()
     }
 }

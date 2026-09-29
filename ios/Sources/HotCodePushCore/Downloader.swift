@@ -114,7 +114,7 @@ public final class Downloader {
         do {
             try PackReader.forEachEntry(in: data) { entry in
                 guard wanted.contains(entry.sha256) else { return }
-                try files.writeFile(try Gzip.decompress(entry.body), sha256: entry.sha256)
+                try files.writeFile(try Gzip.decompressIfCompressed(entry.body), sha256: entry.sha256)
             }
         } catch let failure as DownloadFailure {
             throw failure
@@ -133,7 +133,7 @@ public final class Downloader {
             throw DownloadFailure.downloadFailed("The file \(file.path) could not be downloaded: \(error.localizedDescription)")
         }
         guard response.status == 200 else { throw DownloadFailure.downloadFailed("HTTP \(response.status) for \(file.path)") }
-        let content = (try? Gzip.decompress(response.body)) ?? response.body
+        let content = (try? Gzip.decompressIfCompressed(response.body)) ?? response.body
         do {
             try files.writeFile(content, sha256: file.sha256)
         } catch {

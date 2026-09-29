@@ -56,8 +56,6 @@ public enum PackWriter {
             let size = String(format: "%011o", entry.body.count)
             header.replaceSubrange(124..<(124 + 11), with: Data(size.utf8))
             header.replaceSubrange(148..<156, with: Data(repeating: 0x20, count: 8))
-            header.replaceSubrange(257..<262, with: Data("ustar".utf8))
-            header.replaceSubrange(263..<265, with: Data("00".utf8))
             let checksum = header.reduce(0) { $0 + Int($1) }
             header.replaceSubrange(148..<(148 + 7), with: Data((String(format: "%06o", checksum) + "\u{0}").utf8))
             data.append(header)

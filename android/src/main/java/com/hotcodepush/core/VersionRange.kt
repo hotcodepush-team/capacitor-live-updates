@@ -1,76 +1,77 @@
 package com.hotcodepush.core
 
-/** A dotted numeric version; missing components are zero, pre-release and build metadata are ignored. */
-class Version private constructor(val components: List<Int>) : Comparable<Version> {
-    override fun compareTo(other: Version): Int {
-        for (index in 0 until 3) {
-            val difference = components[index].compareTo(other.components[index])
+/**
+ * The range subset the three evaluators share, over dotted numeric versions: comparators `>=`, `>`, `<=`, `<`, `=`,
+ * a bare version as equality, `x` or `*` wildcards and partial versions as intervals, alternatives joined by `||`.
+ * Anything else does not parse, and a condition that does not parse is not satisfied.
+ */
+object VersionRange {
+    private data class Comparator(val op: String, val version: List<Int>)
+
+    /** A version's numeric components; `null` when the string is not a dotted number. */
+    fun parseVersion(value: String): List<Int>? {
+        val components = value.trim().split('.')
+        val parsed = components.map { component -> if (component.isNotEmpty() && component.all { it in '0'..'9' }) component.toIntOrNull() ?: return null else return null }
+        return parsed.ifEmpty { null }
+    }
+
+    /**
+     * Whether the version satisfies the range: `null` when the range does not parse.
+     * A comparator compares only as many components as it names, so `2.4.1` matches `2.4.1.57`.
+     */
+    fun isVersionInRange(version: List<Int>, range: String): Boolean? {
+        val alternatives = range.split("||").map { parseAlternative(it) ?: return null }
+        return alternatives.any { comparators -> comparators.all { isSatisfied(version, it) } }
+    }
+
+    private fun compare(left: List<Int>, right: List<Int>, length: Int): Int {
+        for (index in 0 until length) {
+            val difference = left.getOrElse(index) { 0 } - right.getOrElse(index) { 0 }
             if (difference != 0) return difference
         }
         return 0
     }
 
-    override fun equals(other: Any?): Boolean = other is Version && components == other.components
-
-    override fun hashCode(): Int = components.hashCode()
-
-    companion object {
-        fun parse(text: String): Version? {
-            val core = text.split('-', '+').first()
-            val parts = core.split('.')
-            if (parts.isEmpty() || parts.size > 3) return null
-            val numbers = parts.map { it.toIntOrNull() ?: return null }
-            return Version(numbers + List(3 - numbers.size) { 0 })
+    private fun isSatisfied(version: List<Int>, comparator: Comparator): Boolean {
+        val order = compare(version, comparator.version, comparator.version.size)
+        return when (comparator.op) {
+            "<" -> order < 0
+            "<=" -> order <= 0
+            "=" -> order == 0
+            ">" -> order > 0
+            else -> order >= 0
         }
     }
-}
 
-/** The subset of npm's range syntax the three evaluators share: comparators, `x` wildcards, `||`. */
-class VersionRange private constructor(private val alternatives: List<List<(Version) -> Boolean>>) {
-    fun contains(version: Version): Boolean = alternatives.any { comparators -> comparators.all { it(version) } }
+    private fun parseAlternative(alternative: String): List<Comparator>? {
+        val parts = alternative.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+        if (parts.isEmpty()) return null
+        return parts.flatMap { parseComparator(it) ?: return null }
+    }
 
-    fun contains(text: String): Boolean = Version.parse(text)?.let(::contains) ?: false
-
-    companion object {
-        fun parse(text: String): VersionRange? {
-            val alternatives = text.split("||").map { alternative ->
-                alternative.trim().split(' ').filter { it.isNotEmpty() }.flatMap { token -> parseToken(token) ?: return null }
+    private fun parseComparator(part: String): List<Comparator>? {
+        var op: String? = null
+        var rest = part
+        for (candidate in listOf(">=", "<=", ">", "<", "=")) {
+            if (rest.startsWith(candidate)) {
+                op = candidate
+                rest = rest.removePrefix(candidate)
+                break
             }
-            return VersionRange(alternatives)
         }
+        val components = rest.trimStart().split('.')
+        if (!components.all { component -> component.isNotEmpty() && component.all { it in '0'..'9' || it == 'x' || it == 'X' || it == '*' } }) return null
+        val wildcardIndex = components.indexOfFirst { component -> component.all { it == 'x' || it == 'X' || it == '*' } }
+        if (wildcardIndex != -1 && op != null) return null
+        if (wildcardIndex == -1 && (op != null || components.size >= 3)) return listOf(Comparator(op ?: "=", components.map { it.toInt() }))
+        val fixed = components.take(if (wildcardIndex == -1) components.size else wildcardIndex).map { it.toInt() }
+        return intervalComparators(fixed)
+    }
 
-        private fun parseToken(token: String): List<(Version) -> Boolean>? {
-            val operators = listOf<Pair<String, (Version) -> (Version) -> Boolean>>(
-                ">=" to { bound -> { it >= bound } },
-                "<=" to { bound -> { it <= bound } },
-                ">" to { bound -> { it > bound } },
-                "<" to { bound -> { it < bound } },
-                "=" to { bound -> { it == bound } },
-            )
-            for ((operator, make) in operators) {
-                if (token.startsWith(operator)) {
-                    val version = Version.parse(token.removePrefix(operator)) ?: return null
-                    return listOf(make(version))
-                }
-            }
-            return wildcard(token)
-        }
-
-        /** `2`, `2.x`, `2.*`, `2.4.x`: the range of every version with that prefix; `1.2.3` alone is exact. */
-        private fun wildcard(token: String): List<(Version) -> Boolean>? {
-            val parts = token.split('.')
-            val fixed = parts.takeWhile { it != "x" && it != "X" && it != "*" }
-            if (fixed.isEmpty() || fixed.size > 3) return null
-            val numbers = fixed.map { it.toIntOrNull() ?: return null }
-            if (numbers.size == 3 && parts.size == 3) {
-                val version = Version.parse(token) ?: return null
-                return listOf { it == version }
-            }
-            val lower = numbers + List(3 - numbers.size) { 0 }
-            val upper = lower.toMutableList().also { it[numbers.size - 1] += 1; for (index in numbers.size until 3) it[index] = 0 }
-            val lowerVersion = Version.parse(lower.joinToString(".")) ?: return null
-            val upperVersion = Version.parse(upper.joinToString(".")) ?: return null
-            return listOf({ it >= lowerVersion }, { it < upperVersion })
-        }
+    /** A partial or wildcard version as the interval it names: `1.2` and `1.2.x` are `>=1.2 <1.3`, `x` is everything. */
+    private fun intervalComparators(fixed: List<Int>): List<Comparator> {
+        if (fixed.isEmpty()) return emptyList()
+        val upper = fixed.toMutableList().also { it[it.size - 1] += 1 }
+        return listOf(Comparator(">=", fixed), Comparator("<", upper))
     }
 }

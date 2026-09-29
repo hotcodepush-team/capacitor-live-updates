@@ -1,87 +1,107 @@
 package com.hotcodepush.core
 
-/** The facts a device evaluates an index against. */
+/** What the device knows when it evaluates a channel index. */
 data class DeviceInfo(
-    val deviceId: String,
-    val binaryVersion: String,
-    val binaryBuild: String,
-    val osVersion: String,
-    val fingerprint: String?,
+    /** The sequence of the index the device has already evaluated; an older index is ignored. */
+    val appliedIndexSequence: Int?,
     val attributes: Map<String, String>,
+    val binaryBuild: String,
+    val binaryVersion: String,
+    /** The floor from the resource file: no release created before it is applied. */
     val builtAt: Long,
-    val reportedAt: Long?,
-    val failedBundleIds: List<String>,
+    /** The running release, or `null` for the embedded bundle; only its id and number matter here. */
     val currentRelease: Release?,
+    val deviceId: String,
+    val failedBundleIds: List<String>,
+    val fingerprint: String?,
+    val osVersion: String,
+    /** The server time of the last acknowledged report, for the spending cap. */
+    val reportedAt: Long?,
+    val runtimeVersion: String?,
 )
 
 data class Skip(val reason: SkippedReason, val condition: ConditionType? = null)
 
-/** What the device should do with an index. */
+/** The per-release verdict, the explanation behind the outcome and the probe's output. */
+data class ReleaseVerdict(val release: IndexRelease, val isEligible: Boolean, val reason: SkippedReason? = null, val condition: ConditionType? = null)
+
+/**
+ * The outcome for the device. On `SKIPPED` with `RELEASE_REVOKED`, the release is the one the device resolves to —
+ * `null` for the embedded bundle; on every other `SKIPPED` it is the newest release the device will not take.
+ */
 sealed class Evaluation {
-    /** Nothing newer than what runs. */
-    object UpToDate : Evaluation()
-
-    /** Take this release: newer and eligible, or the eligible release below a revoked one. */
-    data class Update(val release: IndexRelease) : Evaluation()
-
-    /** Return to the embedded bundle: the running release is revoked or the directive says so. */
-    data class Revert(val reason: SkippedReason) : Evaluation()
-
-    /** A newer release exists and this device will not take it now. */
-    data class Skipped(val newest: IndexRelease, val skip: Skip) : Evaluation()
-
-    /** The whole index is off for this device: paused or beyond the cap. */
-    data class Unavailable(val reason: SkippedReason) : Evaluation()
+    data class UpToDate(val release: IndexRelease?) : Evaluation()
+    data class Available(val release: IndexRelease, val isMandatory: Boolean) : Evaluation()
+    data class Skipped(val release: IndexRelease?, val reason: SkippedReason, val condition: ConditionType? = null) : Evaluation()
 }
 
-/** The shared evaluator: the same rules in TypeScript, Swift and Kotlin, proven equal by the fixture suite. */
+/** The device protocol's evaluation, the same rules as `@hotcodepush/protocol`'s, pinned by its fixture suite. */
 object Evaluator {
+    private const val EMBEDDED_RELEASE_NUMBER = 0
+
     fun evaluate(index: ChannelIndex, device: DeviceInfo): Evaluation {
-        if (index.isPaused) return Evaluation.Unavailable(SkippedReason.CHANNEL_PAUSED)
-        val cappedAt = index.cappedAt
-        if (cappedAt != null && (device.reportedAt == null || device.reportedAt > cappedAt)) return Evaluation.Unavailable(SkippedReason.SPENDING_CAP_REACHED)
-        val current = device.currentRelease
-        val directive = index.rollBackToEmbedded
-        if (current != null && directive != null && current.number <= directive.aboveNumber) return Evaluation.Revert(SkippedReason.RELEASE_REVOKED)
-        val releases = index.releases.sortedByDescending { it.number }
-        if (current != null && current.id in index.revokedReleaseIds) {
-            val older = releases.filter { it.number < current.number }
-            older.firstOrNull { eligibility(it, index, device) == null }?.let { return Evaluation.Update(it) }
-            return Evaluation.Revert(SkippedReason.RELEASE_REVOKED)
+        val currentIndexRelease = device.currentRelease?.let { current -> index.releases.firstOrNull { it.id == current.id } }
+        val applied = device.appliedIndexSequence
+        if (applied != null && index.sequence < applied) return Evaluation.UpToDate(currentIndexRelease)
+        if (isDeviceBeyondCap(index, device)) return Evaluation.Skipped(null, SkippedReason.SPENDING_CAP_REACHED)
+        val verdicts = index.releases.sortedByDescending { it.number }.map { verdict(it, index, device) }
+        val currentNumber = device.currentRelease?.number ?: EMBEDDED_RELEASE_NUMBER
+        val isCurrentRevoked = device.currentRelease?.let { isRevoked(it.id, it.number, index) } ?: false
+        val newerVerdict = verdicts.firstOrNull { it.release.number > currentNumber && it.reason != SkippedReason.RELEASE_REVOKED }
+        val newerEligible = verdicts.firstOrNull { it.isEligible && it.release.number > currentNumber }
+        val olderEligible = verdicts.firstOrNull { it.isEligible && it.release.number < currentNumber }
+        if (index.isPaused) {
+            if (isCurrentRevoked) return Evaluation.Skipped(olderEligible?.release, SkippedReason.RELEASE_REVOKED)
+            if (newerVerdict != null) return Evaluation.Skipped(newerVerdict.release, SkippedReason.CHANNEL_PAUSED)
+            return Evaluation.UpToDate(currentIndexRelease)
         }
-        val newer = releases.filter { current == null || it.number > current.number }
-        var firstSkip: Pair<IndexRelease, Skip>? = null
-        for (candidate in newer) {
-            val skip = eligibility(candidate, index, device)
-            if (skip == null) return Evaluation.Update(candidate)
-            if (firstSkip == null) firstSkip = candidate to skip
-        }
-        firstSkip?.let { (newest, skip) -> return Evaluation.Skipped(newest, skip) }
-        return Evaluation.UpToDate
+        if (newerEligible != null) return Evaluation.Available(newerEligible.release, isMandatoryTransitively(newerEligible.release, currentNumber, verdicts))
+        if (isCurrentRevoked) return Evaluation.Skipped(olderEligible?.release, SkippedReason.RELEASE_REVOKED)
+        if (newerVerdict?.reason != null) return Evaluation.Skipped(newerVerdict.release, newerVerdict.reason, newerVerdict.condition)
+        return Evaluation.UpToDate(currentIndexRelease)
     }
 
-    /** `null` when the device may take the release, else why not. */
-    fun eligibility(release: IndexRelease, index: ChannelIndex, device: DeviceInfo): Skip? {
-        if (release.id in index.revokedReleaseIds) return Skip(SkippedReason.RELEASE_REVOKED)
-        if (release.createdAt < device.builtAt) return Skip(SkippedReason.OLDER_THAN_BINARY)
-        if (release.bundleId in device.failedBundleIds) return Skip(SkippedReason.FAILED_BEFORE)
-        for (condition in release.conditions) {
-            evaluate(condition, device)?.let { return it }
+    fun verdict(release: IndexRelease, index: ChannelIndex, device: DeviceInfo): ReleaseVerdict {
+        if (isRevoked(release.id, release.number, index)) return ReleaseVerdict(release, false, SkippedReason.RELEASE_REVOKED)
+        if (release.createdAt < device.builtAt) return ReleaseVerdict(release, false, SkippedReason.OLDER_THAN_BINARY)
+        if (release.bundleId in device.failedBundleIds) return ReleaseVerdict(release, false, SkippedReason.FAILED_BEFORE)
+        release.conditions.firstOrNull { !isSatisfied(it, device) }?.let { failed ->
+            val type = failed.type ?: return ReleaseVerdict(release, false, SkippedReason.UNSUPPORTED_CONDITION)
+            val reason = if (type == ConditionType.ATTRIBUTE || type == ConditionType.DEVICE) SkippedReason.NOT_TARGETED else SkippedReason.INCOMPATIBLE
+            return ReleaseVerdict(release, false, reason, type)
         }
-        if (Hashing.rolloutBucket(device.deviceId, release.id) >= release.rollout) return Skip(SkippedReason.NOT_IN_ROLLOUT)
-        return null
+        if (Hashing.rolloutBucket(device.deviceId, release.id) >= release.rollout) return ReleaseVerdict(release, false, SkippedReason.NOT_IN_ROLLOUT)
+        return ReleaseVerdict(release, true)
     }
 
-    internal fun evaluate(condition: Condition, device: DeviceInfo): Skip? = when (condition) {
-        is Condition.Binary -> if (VersionRange.parse(condition.range)?.contains(device.binaryVersion) == true) null else Skip(SkippedReason.INCOMPATIBLE, ConditionType.BINARY)
-        is Condition.Os -> if (VersionRange.parse(condition.range)?.contains(device.osVersion) == true) null else Skip(SkippedReason.INCOMPATIBLE, ConditionType.OS)
-        is Condition.Runtime -> Skip(SkippedReason.INCOMPATIBLE, ConditionType.RUNTIME)
-        is Condition.Fingerprint -> if (device.fingerprint == condition.hash) null else Skip(SkippedReason.INCOMPATIBLE, ConditionType.FINGERPRINT)
-        is Condition.Device -> if (Hashing.sha256Hex(device.deviceId) in condition.hashedIds) null else Skip(SkippedReason.NOT_TARGETED, ConditionType.DEVICE)
-        is Condition.Attribute -> {
-            val value = device.attributes[condition.key]
-            if (value != null && Hashing.attributeHash(condition.key, value) == condition.valueSha256) null else Skip(SkippedReason.NOT_TARGETED, ConditionType.ATTRIBUTE)
-        }
-        is Condition.Unknown -> Skip(SkippedReason.UNSUPPORTED_CONDITION)
+    /** Whether the device satisfies the condition; an unknown type never does. */
+    fun isSatisfied(condition: Condition, device: DeviceInfo): Boolean = when (condition) {
+        is Condition.Attribute -> device.attributes[condition.key]?.let { Hashing.attributeHash(condition.key, it) == condition.valueSha256 } ?: false
+        is Condition.Binary -> resolveBinaryVersion(device)?.let { VersionRange.isVersionInRange(it, condition.range) == true } ?: false
+        is Condition.Device -> Hashing.deviceIdHash(device.deviceId) in condition.hashedIds
+        is Condition.Fingerprint -> device.fingerprint != null && device.fingerprint == condition.hash
+        is Condition.Os -> VersionRange.parseVersion(device.osVersion)?.let { VersionRange.isVersionInRange(it, condition.range) == true } ?: false
+        is Condition.Runtime -> device.runtimeVersion != null && device.runtimeVersion == condition.version
+        is Condition.Unknown -> false
     }
+
+    /** The binary version with the build number as its fourth component, when both are numbers. */
+    internal fun resolveBinaryVersion(device: DeviceInfo): List<Int>? {
+        val version = VersionRange.parseVersion(device.binaryVersion) ?: return null
+        val build = VersionRange.parseVersion(device.binaryBuild)
+        return if (build != null && build.size == 1) version + build else version
+    }
+
+    internal fun isDeviceBeyondCap(index: ChannelIndex, device: DeviceInfo): Boolean {
+        val cappedAt = index.cappedAt ?: return false
+        val reportedAt = device.reportedAt ?: return true
+        return reportedAt >= cappedAt
+    }
+
+    /** A release is mandatory for the device when it or any release it skipped over is. */
+    internal fun isMandatoryTransitively(target: IndexRelease, currentNumber: Int, verdicts: List<ReleaseVerdict>): Boolean =
+        verdicts.any { it.release.isMandatory && it.release.number > currentNumber && it.release.number <= target.number }
+
+    internal fun isRevoked(id: String, number: Int, index: ChannelIndex): Boolean =
+        id in index.revokedReleaseIds || (index.rollBackToEmbedded?.let { number <= it.aboveNumber } ?: false)
 }

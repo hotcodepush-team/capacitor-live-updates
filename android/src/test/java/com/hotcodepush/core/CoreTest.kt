@@ -208,7 +208,7 @@ class CoreTest {
         harness.core.sync(SyncTrigger.CALL)
         harness.core.ready()
         harness.publish(listOf(v2), 2, revoked = listOf("r1"), etag = "\"e2\"")
-        assertEquals(SyncResult.skipped(v2.release.release, SkippedReason.RELEASE_REVOKED), harness.core.sync(SyncTrigger.CALL))
+        assertEquals(SyncResult.skipped(null, SkippedReason.RELEASE_REVOKED), harness.core.sync(SyncTrigger.CALL))
         assertNull(harness.loader.loaded.last())
         assertNull(harness.core.status().currentRelease)
     }

@@ -129,34 +129,39 @@ public actor Core {
         case .absent: return .upToDate(current)
         }
         switch Evaluator.evaluate(index, device: deviceInfo()) {
-        case .unavailable(let reason):
-            return .skipped(current, reason: reason)
         case .upToDate:
             return .upToDate(current)
-        case .skipped(let newest, let skip):
-            recordChecked(newest, in: index, status: .skipped, skip: skip)
-            return .skipped(newest.release, reason: skip.reason, condition: skip.condition)
-        case .revert(let reason):
-            if !isCheckOnly {
-                revertToEmbedded()
-            }
-            return .skipped(current, reason: reason)
-        case .update(let target):
+        case .available(let target, let isMandatory):
             recordChecked(target, in: index, status: .available, skip: nil)
             if isCheckOnly {
                 return .available(target.release, notes: target.notes, downloadBytes: target.sizeBytes)
             }
-            return await install(target, installStrategy: installStrategy, network: network)
+            return await install(target, isMandatory: isMandatory, installStrategy: installStrategy, network: network)
+        case .skipped(let release, .releaseRevoked, _):
+            if isCheckOnly {
+                return .skipped(release?.release, reason: .releaseRevoked)
+            }
+            guard let target = release else {
+                revertToEmbedded()
+                return .skipped(nil, reason: .releaseRevoked)
+            }
+            let outcome = await install(target, isMandatory: true, installStrategy: nil, network: network)
+            return outcome.status == .failed ? outcome : .skipped(target.release, reason: .releaseRevoked)
+        case .skipped(let release, let reason, let condition):
+            if let release = release {
+                recordChecked(release, in: index, status: .skipped, skip: Skip(reason: reason, condition: condition))
+            }
+            return .skipped(release?.release, reason: reason, condition: condition)
         }
     }
 
-    private func install(_ target: IndexRelease, installStrategy: InstallStrategy?, network: NetworkPolicy?) async -> SyncResult {
+    private func install(_ target: IndexRelease, isMandatory: Bool, installStrategy: InstallStrategy?, network: NetworkPolicy?) async -> SyncResult {
         let release = target.release
         if let current = state.currentRelease, current.bundleId == target.bundleId {
             adoptInPlace(release)
             return .updated(release, notes: target.notes, installAt: .now)
         }
-        let strategy = target.isMandatory ? .immediate : (installStrategy ?? configuration.installStrategy)
+        let strategy = isMandatory ? .immediate : (installStrategy ?? configuration.installStrategy)
         if let next = state.nextRelease, next.bundleId == target.bundleId, let manifest = files.readManifest(bundleId: next.bundleId), files.isComplete(manifest, embedded: embedded) {
             return applyDownloaded(release, notes: target.notes, strategy: strategy)
         }
@@ -464,7 +469,7 @@ public actor Core {
     }
 
     private func deviceInfo() -> DeviceInfo {
-        return DeviceInfo(deviceId: state.deviceId, binaryVersion: device.binaryVersion, binaryBuild: device.binaryBuild, osVersion: device.osVersion, fingerprint: configuration.fingerprint, attributes: state.attributes, builtAt: configuration.builtAt, reportedAt: state.reportedAt, failedBundleIds: state.failedBundleIds, currentRelease: state.currentRelease)
+        return DeviceInfo(appliedIndexSequence: nil, attributes: state.attributes, binaryBuild: device.binaryBuild, binaryVersion: device.binaryVersion, builtAt: configuration.builtAt, currentRelease: state.currentRelease, deviceId: state.deviceId, failedBundleIds: state.failedBundleIds, fingerprint: configuration.fingerprint, osVersion: device.osVersion, reportedAt: state.reportedAt, runtimeVersion: nil)
     }
 
     // MARK: Events

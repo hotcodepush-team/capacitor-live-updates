@@ -15,11 +15,18 @@ public enum Hashing {
         return sha256Hex(key + "\u{0}" + value)
     }
 
-    /// The rollout bucket: a stable hash of the device id and the release id into a hundred buckets.
+    /// The hash a `device` condition lists for one device id.
+    public static func deviceIdHash(_ deviceId: String) -> String {
+        return sha256Hex(deviceId)
+    }
+
+    /// The rollout bucket: FNV-1a 32-bit over the UTF-8 bytes of the device id followed by the release id, modulo 100.
     public static func rolloutBucket(deviceId: String, releaseId: String) -> Int {
-        let digest = SHA256.hash(data: Data((deviceId + "\u{0}" + releaseId).utf8))
-        let bytes = Array(digest.prefix(4))
-        let value = (UInt32(bytes[0]) << 24) | (UInt32(bytes[1]) << 16) | (UInt32(bytes[2]) << 8) | UInt32(bytes[3])
-        return Int(value % 100)
+        var hash: UInt32 = 0x811c9dc5
+        for byte in (deviceId + releaseId).utf8 {
+            hash ^= UInt32(byte)
+            hash = hash &* 0x01000193
+        }
+        return Int(hash % 100)
     }
 }

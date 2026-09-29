@@ -7,6 +7,15 @@ public enum Gzip {
         case corrupt(Int32)
     }
 
+    /// Gzip bytes carry the `1f 8b` magic; anything else is stored as it is.
+    public static func isCompressed(_ data: Data) -> Bool {
+        return data.count >= 2 && data[data.startIndex] == 0x1f && data[data.startIndex + 1] == 0x8b
+    }
+
+    public static func decompressIfCompressed(_ data: Data) throws -> Data {
+        return isCompressed(data) ? try decompress(data) : data
+    }
+
     public static func decompress(_ data: Data) throws -> Data {
         if data.isEmpty { return data }
         var stream = z_stream()

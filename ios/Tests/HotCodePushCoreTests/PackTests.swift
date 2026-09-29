@@ -10,7 +10,6 @@ final class PackTests: XCTestCase {
         let read = try PackReader.entries(in: pack)
         XCTAssertEqual(read.map { $0.sha256 }, entries.map { $0.sha256 })
         XCTAssertEqual(try Gzip.decompress(read[0].body), content)
-        XCTAssertEqual(String(bytes: pack.subdata(in: 257..<262), encoding: .ascii), "ustar")
     }
 
     func testShouldRejectATruncatedPack() {

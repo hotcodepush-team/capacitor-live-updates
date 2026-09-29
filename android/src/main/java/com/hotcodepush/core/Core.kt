@@ -116,32 +116,38 @@ class Core(
             IndexFetch.Absent -> return SyncResult.upToDate(current)
         }
         return when (val evaluation = Evaluator.evaluate(index, deviceInfo())) {
-            is Evaluation.Unavailable -> SyncResult.skipped(current, evaluation.reason)
-            Evaluation.UpToDate -> SyncResult.upToDate(current)
-            is Evaluation.Skipped -> {
-                lock.withLock { recordChecked(evaluation.newest, index, SyncStatus.SKIPPED, evaluation.skip) }
-                SyncResult.skipped(evaluation.newest.release, evaluation.skip.reason, evaluation.skip.condition)
-            }
-            is Evaluation.Revert -> {
-                if (!isCheckOnly) lock.withLock { revertToEmbedded() }
-                SyncResult.skipped(current, evaluation.reason)
-            }
-            is Evaluation.Update -> {
+            is Evaluation.UpToDate -> SyncResult.upToDate(current)
+            is Evaluation.Available -> {
                 lock.withLock { recordChecked(evaluation.release, index, SyncStatus.AVAILABLE, null) }
                 if (isCheckOnly) SyncResult.available(evaluation.release.release, evaluation.release.notes, evaluation.release.sizeBytes)
-                else install(evaluation.release, installStrategy, network)
+                else install(evaluation.release, evaluation.isMandatory, installStrategy, network)
+            }
+            is Evaluation.Skipped -> when {
+                evaluation.reason != SkippedReason.RELEASE_REVOKED -> {
+                    evaluation.release?.let { release -> lock.withLock { recordChecked(release, index, SyncStatus.SKIPPED, Skip(evaluation.reason, evaluation.condition)) } }
+                    SyncResult.skipped(evaluation.release?.release, evaluation.reason, evaluation.condition)
+                }
+                isCheckOnly -> SyncResult.skipped(evaluation.release?.release, SkippedReason.RELEASE_REVOKED)
+                evaluation.release == null -> {
+                    lock.withLock { revertToEmbedded() }
+                    SyncResult.skipped(null, SkippedReason.RELEASE_REVOKED)
+                }
+                else -> {
+                    val outcome = install(evaluation.release, true, null, network)
+                    if (outcome.status == SyncStatus.FAILED) outcome else SyncResult.skipped(evaluation.release.release, SkippedReason.RELEASE_REVOKED)
+                }
             }
         }
     }
 
-    private suspend fun install(target: IndexRelease, installStrategy: InstallStrategy?, network: NetworkPolicy?): SyncResult {
+    private suspend fun install(target: IndexRelease, isMandatory: Boolean, installStrategy: InstallStrategy?, network: NetworkPolicy?): SyncResult {
         val release = target.release
         val current = state.currentRelease
         if (current != null && current.bundleId == target.bundleId) {
             lock.withLock { adoptInPlace(release) }
             return SyncResult.updated(release, target.notes, InstallMoment.NOW)
         }
-        val strategy = if (target.isMandatory) InstallStrategy.IMMEDIATE else installStrategy ?: configuration.installStrategy
+        val strategy = if (isMandatory) InstallStrategy.IMMEDIATE else installStrategy ?: configuration.installStrategy
         val next = state.nextRelease
         if (next != null && next.bundleId == target.bundleId) {
             val manifest = files.readManifest(next.bundleId)
@@ -420,7 +426,7 @@ class Core(
         }
     }
 
-    private fun deviceInfo() = DeviceInfo(state.deviceId, device.binaryVersion, device.binaryBuild, device.osVersion, configuration.fingerprint, state.attributes, configuration.builtAt, state.reportedAt, state.failedBundleIds, state.currentRelease)
+    private fun deviceInfo() = DeviceInfo(null, state.attributes, device.binaryBuild, device.binaryVersion, configuration.builtAt, state.currentRelease, state.deviceId, state.failedBundleIds, configuration.fingerprint, device.osVersion, state.reportedAt, null)
 
     // Events
 
