@@ -1,3 +1,4 @@
+#if canImport(Capacitor)
 import Capacitor
 import Foundation
 import Network
@@ -81,3 +82,4 @@ final class AppBundleEmbeddedBundle: EmbeddedBundle {
         try FileManager.default.copyItem(at: publicDirectory.appendingPathComponent(path), to: destination)
     }
 }
+#endif

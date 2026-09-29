@@ -1,3 +1,4 @@
+#if canImport(Capacitor)
 import Capacitor
 import Foundation
 import UIKit
@@ -231,3 +232,4 @@ extension HotCodePushPlugin: CoreListener {
         notifyListeners("rolledBack", data: js, retainUntilConsumed: true)
     }
 }
+#endif

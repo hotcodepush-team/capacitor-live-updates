@@ -20,8 +20,8 @@ let package = Package(
             name: "HotCodePushPlugin",
             dependencies: [
                 "HotCodePushCore",
-                .product(name: "Capacitor", package: "capacitor-swift-pm"),
-                .product(name: "Cordova", package: "capacitor-swift-pm")
+                .product(name: "Capacitor", package: "capacitor-swift-pm", condition: .when(platforms: [.iOS])),
+                .product(name: "Cordova", package: "capacitor-swift-pm", condition: .when(platforms: [.iOS]))
             ],
             path: "ios/Sources/HotCodePushPlugin",
             resources: [.copy("PrivacyInfo.xcprivacy")]),

@@ -42,7 +42,7 @@
     "lint": "eslint . && prettier --check . && swiftlint lint --quiet --strict ios",
     "test": "npm run test:ios && npm run test:android",
     "test:android": "cd android && ./gradlew test --console=plain",
-    "test:ios": "swift build --target HotCodePushCoreTests && swift test --skip-build",
+    "test:ios": "swift test",
     "verify": "npm run lint && npm run build && npm run test",
     "verify:android": "cd android && ./gradlew build test --console=plain",
     "verify:ios": "npm run test:ios && xcodebuild -scheme HotcodepushCapacitorLiveUpdates -destination generic/platform=iOS -quiet build"
