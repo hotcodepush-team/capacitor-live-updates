@@ -11,6 +11,7 @@ import com.getcapacitor.Logger
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
+import com.getcapacitor.WebViewListener
 import com.getcapacitor.annotation.CapacitorPlugin
 import com.hotcodepush.core.ChannelChoice
 import com.hotcodepush.core.Clock
@@ -38,6 +39,8 @@ import java.io.File
 @CapacitorPlugin(name = "HotCodePush")
 class HotCodePushPlugin : Plugin(), CoreListener {
     private var core: Core? = null
+    private var loader: CapacitorBundleLoader? = null
+    private var isWebViewListenerRegistered = false
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun load() {
@@ -46,6 +49,7 @@ class HotCodePushPlugin : Plugin(), CoreListener {
             Logger.error(TAG, NOT_CONFIGURED_MESSAGE, null)
             return
         }
+        val loader = CapacitorBundleLoader(context) { bridge }
         val core = Core(
             configuration = configuration,
             device = deviceFacts(context),
@@ -53,7 +57,7 @@ class HotCodePushPlugin : Plugin(), CoreListener {
             files = FileStore(File(context.filesDir, "hotcodepush")),
             embedded = AssetsEmbeddedBundle(context, configuration.embeddedBundleManifest),
             http = OkHttpClientAdapter(),
-            loader = CapacitorBundleLoader(context) { bridge },
+            loader = loader,
             listener = this,
             scheduler = HandlerScheduler(),
             clock = Clock { System.currentTimeMillis() },
@@ -61,13 +65,26 @@ class HotCodePushPlugin : Plugin(), CoreListener {
             temporaryDirectory = File(context.cacheDir, "hotcodepush"),
         )
         this.core = core
+        this.loader = loader
         scope.launch { core.handleAppStart() }
     }
 
     override fun handleOnResume() {
         super.handleOnResume()
+        registerWebViewListener()
         val core = core ?: return
         scope.launch { core.handleAppResume() }
+    }
+
+    /** The bridge accepts a WebView listener only once the activity resumed, never in `load()`. */
+    private fun registerWebViewListener() {
+        if (isWebViewListenerRegistered) return
+        isWebViewListenerRegistered = true
+        bridge.addWebViewListener(object : WebViewListener() {
+            override fun onPageLoaded(webView: android.webkit.WebView) {
+                loader?.handleWebViewLoaded()
+            }
+        })
     }
 
     @PluginMethod
