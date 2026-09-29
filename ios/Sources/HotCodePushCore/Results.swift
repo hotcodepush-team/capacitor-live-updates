@@ -70,6 +70,33 @@ public struct SyncResult: Codable, Equatable {
         self.message = message
     }
 
+    enum CodingKeys: String, CodingKey {
+        case status, release, reason, condition, notes, installAt, downloadBytes, message
+    }
+
+    /// The discriminated union's keys per status; a nullable field is an explicit `null`, an optional one absent.
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(status, forKey: .status)
+        try container.encode(release, forKey: .release)
+        switch status {
+        case .upToDate:
+            break
+        case .available:
+            try container.encode(notes, forKey: .notes)
+            try container.encode(downloadBytes, forKey: .downloadBytes)
+        case .updated:
+            try container.encode(notes, forKey: .notes)
+            try container.encode(installAt, forKey: .installAt)
+        case .skipped:
+            try container.encode(reason, forKey: .reason)
+            try container.encodeIfPresent(condition, forKey: .condition)
+        case .failed:
+            try container.encode(reason, forKey: .reason)
+            try container.encode(message, forKey: .message)
+        }
+    }
+
     public static func upToDate(_ release: Release?) -> SyncResult {
         return SyncResult(status: .upToDate, release: release)
     }
@@ -96,6 +123,18 @@ public struct ReadyResult: Codable, Equatable {
     public let previousRelease: Release?
     public let isRolledBack: Bool
     public let rollbackReason: RollbackReason?
+
+    enum CodingKeys: String, CodingKey {
+        case currentRelease, previousRelease, isRolledBack, rollbackReason
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(currentRelease, forKey: .currentRelease)
+        try container.encode(previousRelease, forKey: .previousRelease)
+        try container.encode(isRolledBack, forKey: .isRolledBack)
+        try container.encodeIfPresent(rollbackReason, forKey: .rollbackReason)
+    }
 }
 
 public struct LastCheck: Codable, Equatable {
@@ -118,6 +157,23 @@ public struct StatusResult: Codable, Equatable {
     public let index: IndexState?
     public let failedBundleIds: [String]
     public let lastReportAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case currentRelease, nextRelease, fallbackRelease, embeddedBundleId, lastCheck, index, failedBundleIds, lastReportAt
+    }
+
+    /// Every key of the typed contract, `null` when empty, so `result.currentRelease === null` holds in app code.
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(currentRelease, forKey: .currentRelease)
+        try container.encode(nextRelease, forKey: .nextRelease)
+        try container.encode(fallbackRelease, forKey: .fallbackRelease)
+        try container.encode(embeddedBundleId, forKey: .embeddedBundleId)
+        try container.encode(lastCheck, forKey: .lastCheck)
+        try container.encode(index, forKey: .index)
+        try container.encode(failedBundleIds, forKey: .failedBundleIds)
+        try container.encode(lastReportAt, forKey: .lastReportAt)
+    }
 }
 
 public enum ChannelSource: String, Codable {
@@ -128,6 +184,17 @@ public struct ChannelResult: Codable, Equatable {
     public let id: String
     public let name: String?
     public let source: ChannelSource
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, source
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encode(source, forKey: .source)
+    }
 }
 
 public struct DeviceResult: Codable, Equatable {
@@ -140,10 +207,38 @@ public struct DeviceResult: Codable, Equatable {
     public let fingerprint: String?
     public let channel: ChannelResult
     public let attributes: [String: String]
+
+    enum CodingKeys: String, CodingKey {
+        case id, platform, binaryVersion, binaryBuild, osVersion, sdkVersion, fingerprint, channel, attributes
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(platform, forKey: .platform)
+        try container.encode(binaryVersion, forKey: .binaryVersion)
+        try container.encode(binaryBuild, forKey: .binaryBuild)
+        try container.encode(osVersion, forKey: .osVersion)
+        try container.encode(sdkVersion, forKey: .sdkVersion)
+        try container.encode(fingerprint, forKey: .fingerprint)
+        try container.encode(channel, forKey: .channel)
+        try container.encode(attributes, forKey: .attributes)
+    }
 }
 
 public struct RolledBackEvent: Codable, Equatable {
     public let from: Release
     public let to: Release?
     public let reason: RollbackReason
+
+    enum CodingKeys: String, CodingKey {
+        case from, to, reason
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(from, forKey: .from)
+        try container.encode(to, forKey: .to)
+        try container.encode(reason, forKey: .reason)
+    }
 }

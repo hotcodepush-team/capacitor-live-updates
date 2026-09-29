@@ -137,7 +137,7 @@ struct Fixture {
         return BundleManifest(bundleId: "embedded", appId: appId, version: "1.0.0", createdAt: builtAt, files: [.init(path: "index.html", sha256: Hashing.sha256Hex(embeddedIndexHtml), sizeBytes: embeddedIndexHtml.count)])
     }
 
-    static func configuration(installStrategy: InstallStrategy = .nextStart, autoSync: Bool = false, readySignal: ReadySignal = .render, publicKeys: [String] = []) -> Configuration {
+    static func configuration(installStrategy: InstallStrategy = .nextStart, autoSync: Bool = false, readySignal: ReadySignal = .render, publicKeys: [String] = [], fingerprint: String? = "fp1:abc") -> Configuration {
         let json: [String: Any] = [
             "appId": appId,
             "channelId": channelId,
@@ -148,7 +148,7 @@ struct Fixture {
             "readyTimeout": 10,
             "publicKeys": publicKeys,
             "builtAt": Iso8601.format(builtAt),
-            "fingerprint": "fp1:abc",
+            "fingerprint": fingerprint as Any,
             "embeddedBundleManifest": try! JSONSerialization.jsonObject(with: try! Json.encoder.encode(embeddedManifest())),
             "embeddedBundleId": "embedded",
             "filesBaseUrl": filesBaseUrl
