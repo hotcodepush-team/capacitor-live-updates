@@ -29,6 +29,10 @@ final class CapacitorBundleLoader: BundleLoader {
         return library.appendingPathComponent(CapacitorBundleLoader.snapshotsDirectory, isDirectory: true).appendingPathComponent(bundleId, isDirectory: true)
     }
 
+    func deleteProjection(bundleId: String) {
+        try? FileManager.default.removeItem(at: projectionDirectory(bundleId: bundleId))
+    }
+
     func persistServedBundle(bundleId: String?) {
         if let bundleId = bundleId {
             KeyValueStore.standard[CapacitorBundleLoader.serverBasePathKey] = projectionDirectory(bundleId: bundleId).path

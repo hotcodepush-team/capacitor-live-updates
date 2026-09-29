@@ -45,7 +45,7 @@ public actor Core {
             rollbackCurrentRelease(reason: .crashed)
             return
         }
-        if let next = state.nextRelease, configuration.installStrategy == .nextStart || next.isMandatory {
+        if let next = state.nextRelease, configuration.installStrategy == .nextStart || next.isMandatory || loader.servedBundleId() == next.bundleId {
             switchToNextRelease()
         }
         loadBundle()
@@ -220,6 +220,9 @@ public actor Core {
         state.fallbackRelease = nil
         state.failedBundleIds = []
         state.lastRollback = nil
+        for bundleId in files.bundleIds() {
+            loader.deleteProjection(bundleId: bundleId)
+        }
         files.deleteEverything()
         loader.persistServedBundle(bundleId: nil)
         reloadApp()
@@ -399,8 +402,12 @@ public actor Core {
         }
     }
 
+    /// Everything no kept release lists: the served tree of every other bundle first, since its links hold the bytes.
     private func deleteUnusedFiles() {
         let kept = Set([state.currentRelease, state.nextRelease, state.fallbackRelease].compactMap { $0?.bundleId })
+        for bundleId in files.bundleIds() where !kept.contains(bundleId) {
+            loader.deleteProjection(bundleId: bundleId)
+        }
         files.deleteUnusedFiles(keepingBundleIds: kept)
     }
 

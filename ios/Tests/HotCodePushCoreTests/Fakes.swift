@@ -52,6 +52,10 @@ final class FakeLoader: BundleLoader {
         return root.appendingPathComponent("www").appendingPathComponent(bundleId)
     }
 
+    func deleteProjection(bundleId: String) {
+        try? FileManager.default.removeItem(at: projectionDirectory(bundleId: bundleId))
+    }
+
     func persistServedBundle(bundleId: String?) {
         persisted = .some(bundleId)
     }

@@ -285,6 +285,39 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(harness.listener.started, [.start, .resume])
     }
 
+    func testShouldDeleteTheServedTreesAndFilesOfBundlesNoKeptReleaseLists() async throws {
+        let harness = Harness(configuration: Fixture.configuration(installStrategy: .immediate))
+        let v2 = Fixture.release(number: 1, bundleId: "b2", content: Data("<html>v2</html>".utf8))
+        let v3 = Fixture.release(number: 2, bundleId: "b3", content: Data("<html>v3</html>".utf8))
+        let v4 = Fixture.release(number: 3, bundleId: "b4", content: Data("<html>v4</html>".utf8))
+        harness.publish([v2], sequence: 1)
+        await harness.core.handleAppStart()
+        _ = await harness.core.sync(trigger: .call)
+        _ = await harness.core.ready()
+        harness.publish([v2, v3], sequence: 2, etag: "\"e2\"")
+        _ = await harness.core.sync(trigger: .call)
+        _ = await harness.core.ready()
+        harness.publish([v2, v3, v4], sequence: 3, etag: "\"e3\"")
+        _ = await harness.core.sync(trigger: .call, installStrategy: .nextStart)
+        for bundleId in ["b2", "b3", "b4"] {
+            XCTAssertTrue(FileManager.default.fileExists(atPath: harness.loader.projectionDirectory(bundleId: bundleId).appendingPathComponent("index.html").path), bundleId)
+        }
+        harness.loader.served = "b4"
+        harness.restart(configuration: Fixture.configuration(installStrategy: .immediate))
+        await harness.core.handleAppStart()
+        let status = await harness.core.status()
+        XCTAssertEqual(status.currentRelease?.bundleId, "b4")
+        XCTAssertEqual(status.fallbackRelease?.bundleId, "b3")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: harness.loader.projectionDirectory(bundleId: "b2").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: harness.loader.projectionDirectory(bundleId: "b3").appendingPathComponent("index.html").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: harness.loader.projectionDirectory(bundleId: "b4").appendingPathComponent("index.html").path))
+        XCTAssertEqual(harness.files.bundleIds(), ["b3", "b4"])
+        XCTAssertFalse(harness.files.hasFile(sha256: Hashing.sha256Hex("<html>v2</html>")))
+        XCTAssertFalse(harness.files.hasFile(sha256: Hashing.sha256Hex("js-b2")))
+        XCTAssertTrue(harness.files.hasFile(sha256: Hashing.sha256Hex("<html>v3</html>")))
+        XCTAssertTrue(harness.files.hasFile(sha256: Hashing.sha256Hex("<html>v4</html>")))
+    }
+
     func testShouldResetToTheEmbeddedBundleAndKeepTheIdentity() async throws {
         let harness = Harness(configuration: Fixture.configuration(installStrategy: .immediate))
         try await harness.core.setAttributes(["plan": "beta"])

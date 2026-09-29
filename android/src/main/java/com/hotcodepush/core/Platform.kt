@@ -17,6 +17,9 @@ interface BundleLoader {
     /** The directory a bundle is laid out in by path for the WebView. */
     fun projectionDirectory(bundleId: String): File
 
+    /** Removes that directory, and with it the links that kept the bundle's files alive. */
+    fun deleteProjection(bundleId: String)
+
     /** Records which bundle the framework loads at the next start; `null` is the embedded bundle. */
     fun persistServedBundle(bundleId: String?)
 

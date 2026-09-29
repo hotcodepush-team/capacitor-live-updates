@@ -290,6 +290,38 @@ class CoreTest {
     }
 
     @Test
+    fun shouldDeleteTheServedTreesAndFilesOfBundlesNoKeptReleaseLists() = runBlocking {
+        val harness = Harness(Fixture.configuration(installStrategy = InstallStrategy.IMMEDIATE))
+        val v2 = Fixture.release(1, "b2", v2Content)
+        val v3 = Fixture.release(2, "b3", "<html>v3</html>".toByteArray())
+        val v4 = Fixture.release(3, "b4", "<html>v4</html>".toByteArray())
+        harness.publish(listOf(v2), 1)
+        harness.core.handleAppStart()
+        harness.core.sync(SyncTrigger.CALL)
+        harness.core.ready()
+        harness.publish(listOf(v2, v3), 2, etag = "\"e2\"")
+        harness.core.sync(SyncTrigger.CALL)
+        harness.core.ready()
+        harness.publish(listOf(v2, v3, v4), 3, etag = "\"e3\"")
+        harness.core.sync(SyncTrigger.CALL, installStrategy = InstallStrategy.NEXT_START)
+        for (bundleId in listOf("b2", "b3", "b4")) assertTrue(bundleId, File(harness.loader.projectionDirectory(bundleId), "index.html").isFile)
+        harness.loader.served = "b4"
+        harness.restart(Fixture.configuration(installStrategy = InstallStrategy.IMMEDIATE))
+        harness.core.handleAppStart()
+        val status = harness.core.status()
+        assertEquals("b4", status.currentRelease?.bundleId)
+        assertEquals("b3", status.fallbackRelease?.bundleId)
+        assertTrue(!harness.loader.projectionDirectory("b2").exists())
+        assertTrue(File(harness.loader.projectionDirectory("b3"), "index.html").isFile)
+        assertTrue(File(harness.loader.projectionDirectory("b4"), "index.html").isFile)
+        assertEquals(listOf("b3", "b4"), harness.files.bundleIds())
+        assertTrue(!harness.files.hasFile(Hashing.sha256Hex(v2Content)))
+        assertTrue(!harness.files.hasFile(Hashing.sha256Hex("js-b2")))
+        assertTrue(harness.files.hasFile(Hashing.sha256Hex("<html>v3</html>")))
+        assertTrue(harness.files.hasFile(Hashing.sha256Hex("<html>v4</html>")))
+    }
+
+    @Test
     fun shouldResetToTheEmbeddedBundleAndKeepTheIdentity() = runBlocking {
         val harness = Harness(Fixture.configuration(installStrategy = InstallStrategy.IMMEDIATE))
         harness.core.setAttributes(mapOf("plan" to "beta"))

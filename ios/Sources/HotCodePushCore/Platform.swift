@@ -23,6 +23,8 @@ public struct DeviceFacts: Equatable {
 public protocol BundleLoader: AnyObject {
     /// The directory a bundle is laid out in by path for the WebView.
     func projectionDirectory(bundleId: String) -> URL
+    /// Removes that directory, and with it the links that kept the bundle's files alive.
+    func deleteProjection(bundleId: String)
     /// Records which bundle the framework loads at the next start; `nil` is the embedded bundle.
     func persistServedBundle(bundleId: String?)
     /// Points the WebView at the bundle now and reloads it; `nil` is the embedded bundle.

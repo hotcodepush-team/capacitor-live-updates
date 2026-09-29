@@ -24,6 +24,10 @@ class CapacitorBundleLoader(private val context: Context, private val bridge: ()
 
     override fun projectionDirectory(bundleId: String): File = File(projectionsDirectory, bundleId)
 
+    override fun deleteProjection(bundleId: String) {
+        projectionDirectory(bundleId).deleteRecursively()
+    }
+
     override fun persistServedBundle(bundleId: String?) {
         preferences().edit().putString(WebView.CAP_SERVER_PATH, bundleId?.let { projectionDirectory(it).path } ?: "").apply()
     }

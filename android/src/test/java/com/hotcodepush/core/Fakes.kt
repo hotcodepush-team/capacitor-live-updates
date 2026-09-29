@@ -46,6 +46,10 @@ class FakeLoader(private val root: File) : BundleLoader {
 
     override fun projectionDirectory(bundleId: String): File = File(File(root, "www"), bundleId)
 
+    override fun deleteProjection(bundleId: String) {
+        projectionDirectory(bundleId).deleteRecursively()
+    }
+
     override fun persistServedBundle(bundleId: String?) {
         persisted = bundleId
         hasPersisted = true

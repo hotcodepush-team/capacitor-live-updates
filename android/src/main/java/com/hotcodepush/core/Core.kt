@@ -46,7 +46,7 @@ class Core(
             return
         }
         val next = state.nextRelease
-        if (next != null && (configuration.installStrategy == InstallStrategy.NEXT_START || next.isMandatory)) switchToNextRelease()
+        if (next != null && (configuration.installStrategy == InstallStrategy.NEXT_START || next.isMandatory || loader.servedBundleId() == next.bundleId)) switchToNextRelease()
         loadBundle()
         if (isCurrentReleaseUnconfirmed()) {
             startReadyTimer()
@@ -203,6 +203,7 @@ class Core(
         state.fallbackRelease = null
         state.failedBundleIds = emptyList()
         state.lastRollback = null
+        files.bundleIds().forEach(loader::deleteProjection)
         files.deleteEverything()
         loader.persistServedBundle(null)
         reloadApp()
@@ -364,8 +365,10 @@ class Core(
         intervalTimer = scheduler.schedule(configuration.syncInterval) { scope.launch { sync(SyncTrigger.INTERVAL) } }
     }
 
+    /** Everything no kept release lists: the served tree of every other bundle first, since its links hold the bytes. */
     private fun deleteUnusedFiles() {
         val kept = listOfNotNull(state.currentRelease, state.nextRelease, state.fallbackRelease).map { it.bundleId }.toSet()
+        files.bundleIds().filter { it !in kept }.forEach(loader::deleteProjection)
         files.deleteUnusedFiles(kept)
     }
 
