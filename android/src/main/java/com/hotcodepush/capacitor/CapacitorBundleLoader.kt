@@ -50,6 +50,9 @@ class CapacitorBundleLoader(private val context: Context, private val bridge: ()
 
     fun handleWebViewLoaded() = gate.markLoaded()
 
+    /** The activity is gone: a switch still waiting for its WebView has nowhere to go. */
+    fun close() = gate.close()
+
     private fun preferences() = context.getSharedPreferences(WebView.WEBVIEW_PREFS_NAME, Activity.MODE_PRIVATE)
 
     companion object {

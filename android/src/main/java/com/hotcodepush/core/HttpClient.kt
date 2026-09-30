@@ -17,7 +17,7 @@ interface HttpClient {
     suspend fun download(url: String, file: File, progress: (Long, Long) -> Unit)
 }
 
-class OkHttpClientAdapter(private val client: OkHttpClient = OkHttpClient.Builder().connectTimeout(30, TimeUnit.SECONDS).readTimeout(60, TimeUnit.SECONDS).build()) : HttpClient {
+class OkHttpClientAdapter(private val client: OkHttpClient = sharedClient) : HttpClient {
     override suspend fun get(url: String, headers: Map<String, String>): HttpResponse {
         val request = Request.Builder().url(url).apply { headers.forEach { (name, value) -> header(name, value) } }.build()
         client.newCall(request).execute().use { response ->
@@ -49,5 +49,10 @@ class OkHttpClientAdapter(private val client: OkHttpClient = OkHttpClient.Builde
                 }
             }
         }
+    }
+
+    companion object {
+        /** One client per process, as OkHttp asks: its pools and threads outlive every activity. */
+        private val sharedClient: OkHttpClient by lazy { OkHttpClient.Builder().connectTimeout(30, TimeUnit.SECONDS).readTimeout(60, TimeUnit.SECONDS).build() }
     }
 }

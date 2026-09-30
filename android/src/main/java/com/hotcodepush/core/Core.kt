@@ -71,8 +71,11 @@ class Core(
         ReadyResult(state.currentRelease, rollback?.from, rollback != null, rollback?.reason)
     }
 
+    /** The background: the interval timer stops, since interval syncs belong to the foreground, and the moment is kept for `on-resume`. */
     suspend fun handleAppPause() = lock.withLock {
         backgroundedAt = clock.now()
+        intervalTimer?.cancel()
+        intervalTimer = null
     }
 
     /** A resume installs an `on-resume` release after enough time in the background, else syncs when the interval has passed. */
@@ -84,8 +87,12 @@ class Core(
             return
         }
         if (!configuration.autoSync) return
-        val lastSyncAt = state.lastSyncAt ?: Long.MIN_VALUE
-        if (clock.now() - lastSyncAt >= configuration.syncInterval * 1000) scope.launch { sync(SyncTrigger.RESUME) }
+        val elapsedSeconds = state.lastSyncAt?.let { (clock.now() - it) / 1000.0 }
+        if (elapsedSeconds == null || elapsedSeconds >= configuration.syncInterval) {
+            scope.launch { sync(SyncTrigger.RESUME) }
+            return
+        }
+        scheduleIntervalSync(configuration.syncInterval - elapsedSeconds)
     }
 
     // Sync
@@ -111,7 +118,7 @@ class Core(
             state.lastCheck = LastCheck(clock.now(), trigger, result)
             if (!isCheckOnly) {
                 state.lastSyncAt = clock.now()
-                scheduleIntervalSync()
+                scheduleIntervalSync(configuration.syncInterval)
             }
         }
         if (!isCheckOnly) listener.synced(result, trigger)
@@ -388,10 +395,10 @@ class Core(
         if (isCurrentReleaseUnconfirmed()) rollbackCurrentRelease(RollbackReason.READY_TIMEOUT)
     }
 
-    private fun scheduleIntervalSync() {
+    private fun scheduleIntervalSync(afterSeconds: Double) {
         intervalTimer?.cancel()
         if (!configuration.autoSync) return
-        intervalTimer = scheduler.schedule(configuration.syncInterval) { scope.launch { sync(SyncTrigger.INTERVAL) } }
+        intervalTimer = scheduler.schedule(afterSeconds) { scope.launch { sync(SyncTrigger.INTERVAL) } }
     }
 
     /** Everything no kept release lists: the served tree of every other bundle first, since its links hold the bytes. */

@@ -32,6 +32,7 @@ import com.hotcodepush.core.SyncTrigger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.io.File
@@ -41,6 +42,7 @@ class HotCodePushPlugin : Plugin(), CoreListener {
     private var core: Core? = null
     private var loader: CapacitorBundleLoader? = null
     private var isWebViewListenerRegistered = false
+    private val scheduler = HandlerScheduler()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun load() {
@@ -59,7 +61,7 @@ class HotCodePushPlugin : Plugin(), CoreListener {
             http = OkHttpClientAdapter(),
             loader = loader,
             listener = this,
-            scheduler = HandlerScheduler(),
+            scheduler = scheduler,
             clock = Clock { System.currentTimeMillis() },
             scope = scope,
             temporaryDirectory = File(context.cacheDir, "hotcodepush"),
@@ -80,6 +82,16 @@ class HotCodePushPlugin : Plugin(), CoreListener {
         registerWebViewListener()
         val core = core ?: return
         scope.launch { core.handleAppResume() }
+    }
+
+    /** The activity took its bridge with it: nothing of this instance may fire again, or two cores would race on one store. */
+    override fun handleOnDestroy() {
+        super.handleOnDestroy()
+        scope.cancel()
+        scheduler.cancelAll()
+        loader?.close()
+        core = null
+        loader = null
     }
 
     /** The bridge accepts a WebView listener only once the activity resumed, never in `load()`. */
@@ -256,4 +268,6 @@ class HandlerScheduler : Scheduler {
         handler.postDelayed(runnable, (afterSeconds * 1000).toLong())
         return ScheduledTask { handler.removeCallbacks(runnable) }
     }
+
+    fun cancelAll() = handler.removeCallbacksAndMessages(null)
 }

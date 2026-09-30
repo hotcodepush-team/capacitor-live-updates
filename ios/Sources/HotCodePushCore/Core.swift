@@ -75,8 +75,11 @@ public actor Core {
         return ReadyResult(currentRelease: state.currentRelease, previousRelease: rollback?.from, isRolledBack: rollback != nil, rollbackReason: rollback?.reason)
     }
 
+    /// The background: the interval timer stops, since interval syncs belong to the foreground, and the moment is kept for `on-resume`.
     public func handleAppPause() {
         backgroundedAt = clock.now
+        intervalTimer?.cancel()
+        intervalTimer = nil
     }
 
     /// A resume installs an `on-resume` release after enough time in the background, else syncs when the interval has passed.
@@ -88,8 +91,9 @@ public actor Core {
             return
         }
         guard configuration.autoSync else { return }
-        let lastSyncAt = state.lastSyncAt ?? .distantPast
-        if clock.now.timeIntervalSince(lastSyncAt) >= configuration.syncInterval {
+        if let elapsed = state.lastSyncAt.map({ clock.now.timeIntervalSince($0) }), elapsed < configuration.syncInterval {
+            scheduleIntervalSync(after: configuration.syncInterval - elapsed)
+        } else {
             Task { await self.sync(trigger: .resume) }
         }
     }
@@ -123,7 +127,7 @@ public actor Core {
         if !isCheckOnly {
             state.lastSyncAt = clock.now
             listener.synced(result: result, trigger: trigger)
-            scheduleIntervalSync()
+            scheduleIntervalSync(after: configuration.syncInterval)
         }
         return result
     }
@@ -433,10 +437,10 @@ public actor Core {
         rollbackCurrentRelease(reason: .readyTimeout)
     }
 
-    private func scheduleIntervalSync() {
+    private func scheduleIntervalSync(after seconds: TimeInterval) {
         intervalTimer?.cancel()
         guard configuration.autoSync else { return }
-        intervalTimer = scheduler.schedule(after: configuration.syncInterval) { [weak self] in
+        intervalTimer = scheduler.schedule(after: seconds) { [weak self] in
             guard let self = self else { return }
             Task { await self.sync(trigger: .interval) }
         }

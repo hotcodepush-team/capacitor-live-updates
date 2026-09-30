@@ -409,6 +409,21 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(harness.listener.started, [.start, .resume])
     }
 
+    func testShouldPauseTheIntervalTimerInTheBackgroundAndReArmItOnResume() async throws {
+        let harness = Harness(configuration: Fixture.configuration(autoSync: true))
+        harness.publish([], sequence: 1)
+        await harness.core.handleAppStart()
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(harness.scheduler.tasks.map { $0.seconds }, [900])
+        await harness.core.handleAppPause()
+        XCTAssertTrue(harness.scheduler.tasks[0].isCancelled)
+        harness.clock.now = harness.clock.now.addingTimeInterval(600)
+        await harness.core.handleAppResume()
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(harness.listener.started, [.start])
+        XCTAssertEqual(harness.scheduler.tasks.map { $0.seconds }, [900, 300])
+    }
+
     func testShouldDeleteTheServedTreesAndFilesOfBundlesNoKeptReleaseLists() async throws {
         let harness = Harness(configuration: Fixture.configuration(installStrategy: .immediate))
         let v2 = Fixture.release(number: 1, bundleId: "b2", content: Data("<html>v2</html>".utf8))

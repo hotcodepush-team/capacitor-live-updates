@@ -418,6 +418,20 @@ class CoreTest {
     }
 
     @Test
+    fun shouldPauseTheIntervalTimerInTheBackgroundAndReArmItOnResume() = runBlocking {
+        val harness = Harness(Fixture.configuration(autoSync = true))
+        harness.publish(emptyList(), 1)
+        harness.core.handleAppStart()
+        assertEquals(listOf(900.0), harness.scheduler.tasks.map { it.seconds })
+        harness.core.handleAppPause()
+        assertTrue(harness.scheduler.tasks[0].isCancelled)
+        harness.clock.now += 600_000
+        harness.core.handleAppResume()
+        assertEquals(listOf(SyncTrigger.START), harness.listener.started)
+        assertEquals(listOf(900.0, 300.0), harness.scheduler.tasks.map { it.seconds })
+    }
+
+    @Test
     fun shouldDeleteTheServedTreesAndFilesOfBundlesNoKeptReleaseLists() = runBlocking {
         val harness = Harness(Fixture.configuration(installStrategy = InstallStrategy.IMMEDIATE))
         val v2 = Fixture.release(1, "b2", v2Content)

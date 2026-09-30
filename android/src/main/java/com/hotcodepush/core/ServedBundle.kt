@@ -30,4 +30,10 @@ class WebViewGate {
         pending?.invoke()
         pending = null
     }
+
+    /** Drops the held work: the WebView it waited for is gone with its activity. */
+    @Synchronized
+    fun close() {
+        pending = null
+    }
 }

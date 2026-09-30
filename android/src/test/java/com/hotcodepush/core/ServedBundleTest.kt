@@ -46,4 +46,14 @@ class WebViewGateTest {
         gate.markLoaded()
         assertEquals(listOf("second"), runs)
     }
+
+    @Test
+    fun shouldDropTheHeldSwitchWhenClosed() {
+        val gate = WebViewGate()
+        val runs = mutableListOf<String>()
+        gate.runWhenLoaded { runs += "at start" }
+        gate.close()
+        gate.markLoaded()
+        assertEquals(emptyList<String>(), runs)
+    }
 }
