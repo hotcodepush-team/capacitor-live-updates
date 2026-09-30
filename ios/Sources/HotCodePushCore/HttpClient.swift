@@ -20,11 +20,13 @@ public struct HttpResponse {
 public protocol HttpClient {
     func get(_ url: URL, headers: [String: String]) async throws -> HttpResponse
     func post(_ url: URL, headers: [String: String], body: Data) async throws -> HttpResponse
-    /// Downloads to the file, appending from its current size with a `Range` request when it exists.
-    func download(_ url: URL, to file: URL, progress: @escaping (Int, Int) -> Void) async throws
+    /// Downloads to the file, appending from its current size with a `Range` request when it exists; past `maximumBytes` it stops and deletes the file.
+    func download(_ url: URL, to file: URL, maximumBytes: Int, progress: @escaping (Int, Int) -> Void) async throws
 }
 
 public final class UrlSessionHttpClient: HttpClient {
+    private static let chunkSize = 64 * 1024
+
     private let session: URLSession
 
     public init(session: URLSession = URLSession(configuration: .ephemeral)) {
@@ -55,28 +57,45 @@ public final class UrlSessionHttpClient: HttpClient {
         return request
     }
 
-    public func download(_ url: URL, to file: URL, progress: @escaping (Int, Int) -> Void) async throws {
+    /// Streams the body into the file chunk by chunk, so a body larger than it may be never lands on disk whole.
+    public func download(_ url: URL, to file: URL, maximumBytes: Int, progress: @escaping (Int, Int) -> Void) async throws {
         var request = URLRequest(url: url)
         request.timeoutInterval = 60
         let existing = (try? FileManager.default.attributesOfItem(atPath: file.path)[.size] as? Int) ?? 0
         if existing > 0 {
             request.setValue("bytes=\(existing)-", forHTTPHeaderField: "Range")
         }
-        let (temporary, response) = try await session.download(for: request)
-        defer { try? FileManager.default.removeItem(at: temporary) }
+        let (bytes, response) = try await session.bytes(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard status == 200 || status == 206 else { throw DownloadFailure.downloadFailed("HTTP \(status) for \(url.lastPathComponent)") }
         try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-        if status == 206, existing > 0, let handle = try? FileHandle(forWritingTo: file) {
-            try handle.seekToEnd()
-            try handle.write(contentsOf: Data(contentsOf: temporary))
-            try handle.close()
-        } else {
-            try? FileManager.default.removeItem(at: file)
-            try FileManager.default.moveItem(at: temporary, to: file)
+        let isResumed = status == 206 && existing > 0
+        if !isResumed {
+            FileManager.default.createFile(atPath: file.path, contents: nil)
         }
-        let size = (try? FileManager.default.attributesOfItem(atPath: file.path)[.size] as? Int) ?? 0
-        progress(size, size)
+        let handle = try FileHandle(forWritingTo: file)
+        defer { try? handle.close() }
+        try handle.seekToEnd()
+        var written = isResumed ? existing : 0
+        var chunk: [UInt8] = []
+        chunk.reserveCapacity(UrlSessionHttpClient.chunkSize)
+        func writeChunk() throws {
+            written += chunk.count
+            guard written <= maximumBytes else {
+                try? FileManager.default.removeItem(at: file)
+                throw DownloadFailure.downloadFailed("\(url.lastPathComponent) is larger than its \(maximumBytes) bytes")
+            }
+            try handle.write(contentsOf: chunk)
+            chunk.removeAll(keepingCapacity: true)
+            progress(written, maximumBytes)
+        }
+        for try await byte in bytes {
+            chunk.append(byte)
+            if chunk.count == UrlSessionHttpClient.chunkSize {
+                try writeChunk()
+            }
+        }
+        try writeChunk()
     }
 
     private static func headers(of response: URLResponse) -> [String: String] {

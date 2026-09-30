@@ -57,6 +57,9 @@ class FileStore(val rootDirectory: File) {
         rootDirectory.deleteRecursively()
     }
 
+    /** The bytes free on the store's volume, measured on its nearest existing directory. */
+    fun availableBytes(): Long = generateSequence(rootDirectory) { it.parentFile }.first { it.exists() }.usableSpace
+
     /** Whether every file the manifest lists is on disk; existence is the check, not a re-hash. */
     fun isComplete(manifest: BundleManifest, embedded: EmbeddedBundle): Boolean = manifest.files.all { hasFile(it.sha256) || embedded.has(it.sha256) }
 }

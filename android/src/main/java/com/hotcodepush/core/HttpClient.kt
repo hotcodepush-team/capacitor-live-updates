@@ -16,8 +16,8 @@ interface HttpClient {
 
     suspend fun post(url: String, headers: Map<String, String>, body: ByteArray): HttpResponse
 
-    /** Downloads to the file, appending from its current size with a `Range` request when it exists. */
-    suspend fun download(url: String, file: File, progress: (Long, Long) -> Unit)
+    /** Downloads to the file, appending from its current size with a `Range` request when it exists; past `maximumBytes` it stops and deletes the file. */
+    suspend fun download(url: String, file: File, maximumBytes: Long, progress: (Long, Long) -> Unit)
 }
 
 class OkHttpClientAdapter(private val client: OkHttpClient = sharedClient) : HttpClient {
@@ -32,14 +32,13 @@ class OkHttpClientAdapter(private val client: OkHttpClient = sharedClient) : Htt
 
     private fun request(url: String, headers: Map<String, String>) = Request.Builder().url(url).apply { headers.forEach { (name, value) -> header(name, value) } }
 
-    override suspend fun download(url: String, file: File, progress: (Long, Long) -> Unit) {
+    override suspend fun download(url: String, file: File, maximumBytes: Long, progress: (Long, Long) -> Unit) {
         val existing = if (file.isFile) file.length() else 0L
         val request = Request.Builder().url(url).apply { if (existing > 0) header("Range", "bytes=$existing-") }.build()
         client.newCall(request).execute().use { response ->
             if (response.code != 200 && response.code != 206) throw DownloadFailure.DownloadFailed("HTTP ${response.code} for ${url.substringAfterLast('/')}")
             file.parentFile?.mkdirs()
             val append = response.code == 206 && existing > 0
-            val total = existing.takeIf { append }?.plus(response.body.contentLength()) ?: response.body.contentLength()
             var written = if (append) existing else 0L
             file.outputStream().use { output ->
                 if (append) file.appendBytes(ByteArray(0))
@@ -48,9 +47,13 @@ class OkHttpClientAdapter(private val client: OkHttpClient = sharedClient) : Htt
                     while (true) {
                         val read = input.read(buffer)
                         if (read < 0) break
-                        output.write(buffer, 0, read)
                         written += read
-                        progress(written, total)
+                        if (written > maximumBytes) {
+                            file.delete()
+                            throw DownloadFailure.DownloadFailed("${url.substringAfterLast('/')} is larger than its $maximumBytes bytes")
+                        }
+                        output.write(buffer, 0, read)
+                        progress(written, maximumBytes)
                     }
                 }
             }

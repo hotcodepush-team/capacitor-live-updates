@@ -2,6 +2,7 @@ package com.hotcodepush.core
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -16,12 +17,33 @@ class PackTest {
         assertEquals(0, pack.size % 512)
         val read = PackReader.entries(pack)
         assertEquals(entries.map { it.sha256 }, read.map { it.sha256 })
-        assertEquals("hello", String(Gzip.decompress(read[0].body)))
+        assertEquals("hello", String(Gzip.decompress(read[0].body, content.size.toLong())))
     }
 
     @Test(expected = PackFormatException::class)
     fun shouldRejectATruncatedPack() {
         PackReader.entries(PackWriter.pack(listOf(PackEntry("abc", ByteArray(700)))).copyOf(600))
+    }
+
+    @Test(expected = PackFormatException::class)
+    fun shouldRefuseAnEntryLargerThanWhatIsLeftOfThePackBeforeAllocatingIt() {
+        val pack = PackWriter.pack(listOf(PackEntry("abc", ByteArray(700))))
+        "%011o".format(1_500_000_000).toByteArray(Charsets.US_ASCII).copyInto(pack, 124)
+        PackReader.entries(pack)
+    }
+
+    @Test(expected = PackFormatException::class)
+    fun shouldRefuseAnEntryWithANegativeSize() {
+        val pack = PackWriter.pack(listOf(PackEntry("abc", ByteArray(700))))
+        "-0000001000".toByteArray(Charsets.US_ASCII).copyInto(pack, 124)
+        PackReader.entries(pack)
+    }
+
+    @Test
+    fun shouldRefuseToInflatePastTheMaximum() {
+        val content = ByteArray(1_000_000)
+        assertTrue(Gzip.decompress(Gzip.compress(content), content.size.toLong()).contentEquals(content))
+        assertThrows(GzipSizeException::class.java) { Gzip.decompress(Gzip.compress(content), content.size - 1L) }
     }
 }
 

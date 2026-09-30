@@ -2,9 +2,12 @@ import XCTest
 @testable import HotCodePushCore
 
 final class DownloaderTests: XCTestCase {
+    private let indexHtml = Data("<html>v2</html>".utf8)
+    private let appJs = Data("console.log('v2')".utf8)
+
     func testShouldRefuseAManifestUrlOffTheConfiguredHosts() async {
         let harness = DownloaderHarness()
-        let release = harness.publish(DownloaderHarness.manifest(files: ["index.html": Data("v2".utf8)]), manifestUrl: "https://elsewhere.test/manifest.json")
+        let release = harness.publish(DownloaderHarness.bundle(["index.html": indexHtml]).manifest, manifestUrl: "https://elsewhere.test/manifest.json")
         let failure = await harness.downloadFailure(release)
         XCTAssertEqual(failure?.reason, .verificationFailed)
         XCTAssertTrue(harness.http.requests.isEmpty)
@@ -12,7 +15,7 @@ final class DownloaderTests: XCTestCase {
 
     func testShouldRefuseAPackUrlOffTheConfiguredHosts() async {
         let harness = DownloaderHarness()
-        let manifest = DownloaderHarness.manifest(files: ["index.html": Data("v2".utf8), "app.js": Data("js".utf8)], packUrl: "https://elsewhere.test/pack")
+        let manifest = DownloaderHarness.bundle(["index.html": indexHtml, "app.js": appJs], packUrl: "https://elsewhere.test/pack").manifest
         let failure = await harness.downloadFailure(harness.publish(manifest))
         XCTAssertEqual(failure?.reason, .verificationFailed)
         XCTAssertEqual(harness.http.requests.map { $0.url.host }, ["files.test"])
@@ -20,16 +23,44 @@ final class DownloaderTests: XCTestCase {
 
     func testShouldRefuseAManifestPathThatClimbsOutOfTheServedTree() async {
         let harness = DownloaderHarness()
-        let failure = await harness.downloadFailure(harness.publish(DownloaderHarness.manifest(files: ["../../escape.html": Data("v2".utf8)])))
+        let failure = await harness.downloadFailure(harness.publish(DownloaderHarness.bundle(["../../escape.html": indexHtml]).manifest))
         XCTAssertEqual(failure?.reason, .verificationFailed)
         XCTAssertTrue(harness.files.bundleIds().isEmpty)
         XCTAssertFalse(FileManager.default.fileExists(atPath: harness.root.appendingPathComponent("escape.html").path))
+    }
+
+    func testShouldFailADownloadThatDoesNotFitInTheFreeSpace() async {
+        let harness = DownloaderHarness()
+        let bundle = DownloaderHarness.bundle(["index.html": indexHtml, "app.js": appJs])
+        let manifest = DownloaderHarness.replacingFiles(of: bundle.manifest, with: bundle.manifest.files.map { .init(path: $0.path, sha256: $0.sha256, sizeBytes: Int.max / 4) })
+        let failure = await harness.downloadFailure(harness.publish(manifest, pack: bundle.pack))
+        XCTAssertEqual(failure?.reason, .downloadFailed)
+        XCTAssertEqual(harness.http.requests.map { $0.url.lastPathComponent }, ["manifest.json"])
+    }
+
+    func testShouldRefuseAPackEntryThatInflatesPastItsFileSize() async {
+        let harness = DownloaderHarness()
+        let bundle = DownloaderHarness.bundle(["index.html": indexHtml, "app.js": appJs])
+        let manifest = DownloaderHarness.replacingFiles(of: bundle.manifest, with: bundle.manifest.files.map { .init(path: $0.path, sha256: $0.sha256, sizeBytes: $0.sizeBytes - 1) })
+        let failure = await harness.downloadFailure(harness.publish(manifest, pack: bundle.pack))
+        XCTAssertEqual(failure?.reason, .verificationFailed)
+        XCTAssertFalse(harness.files.hasFile(sha256: Hashing.sha256Hex(indexHtml)))
+    }
+
+    func testShouldRefuseASingleFileLargerThanItsSize() async {
+        let harness = DownloaderHarness()
+        let manifest = BundleManifest(bundleId: DownloaderHarness.bundleId, appId: Fixture.appId, version: "1.2.0", createdAt: Fixture.builtAt, files: [.init(path: "index.html", sha256: Hashing.sha256Hex(indexHtml), sizeBytes: indexHtml.count - 1)])
+        harness.http.stub("\(Fixture.filesBaseUrl)/apps/\(Fixture.appId)/files/\(Hashing.sha256Hex(indexHtml))", body: indexHtml)
+        let failure = await harness.downloadFailure(harness.publish(manifest))
+        XCTAssertEqual(failure?.reason, .downloadFailed)
+        XCTAssertFalse(harness.files.hasFile(sha256: Hashing.sha256Hex(indexHtml)))
     }
 }
 
 /// A downloader over fakes, in a fresh temporary directory.
 final class DownloaderHarness {
     static let bundleId = "b2"
+    static let packUrl = "\(Fixture.filesBaseUrl)/apps/\(Fixture.appId)/bundles/\(bundleId)/pack"
 
     let root = FileManager.default.temporaryDirectory.appendingPathComponent("hotcodepush-tests-\(UUID().uuidString)")
     let http = FakeHttpClient()
@@ -41,15 +72,25 @@ final class DownloaderHarness {
         downloader = Downloader(configuration: Fixture.configuration(), files: files, embedded: InMemoryEmbeddedBundle(), http: http, temporaryDirectory: root.appendingPathComponent("tmp"))
     }
 
-    static func manifest(files: [String: Data], packUrl: String = "\(Fixture.filesBaseUrl)/apps/\(Fixture.appId)/bundles/\(bundleId)/pack", packSizeBytes: Int = 0) -> BundleManifest {
-        let entries = files.sorted { $0.key < $1.key }.map { BundleManifest.File(path: $0.key, sha256: Hashing.sha256Hex($0.value), sizeBytes: $0.value.count) }
-        return BundleManifest(bundleId: bundleId, appId: Fixture.appId, version: "1.2.0", createdAt: Fixture.builtAt, files: entries, pack: .init(url: packUrl, sizeBytes: packSizeBytes))
+    /// The manifest of these files and the pack that carries them, each entry the gzip bytes the bucket serves.
+    static func bundle(_ files: [String: Data], packUrl: String = packUrl) -> (manifest: BundleManifest, pack: Data) {
+        let sorted = files.sorted { $0.key < $1.key }
+        let pack = PackWriter.pack(sorted.map { PackEntry(sha256: Hashing.sha256Hex($0.value), body: try! Gzip.compress($0.value)) })
+        let entries = sorted.map { BundleManifest.File(path: $0.key, sha256: Hashing.sha256Hex($0.value), sizeBytes: $0.value.count) }
+        return (BundleManifest(bundleId: bundleId, appId: Fixture.appId, version: "1.2.0", createdAt: Fixture.builtAt, files: entries, pack: .init(url: packUrl, sizeBytes: pack.count)), pack)
     }
 
-    /// Serves the manifest where the index entry says it is and returns that entry.
-    func publish(_ manifest: BundleManifest, manifestUrl: String = "\(Fixture.filesBaseUrl)/apps/\(Fixture.appId)/bundles/\(bundleId)/manifest.json") -> IndexRelease {
+    static func replacingFiles(of manifest: BundleManifest, with files: [BundleManifest.File]) -> BundleManifest {
+        return BundleManifest(bundleId: manifest.bundleId, appId: manifest.appId, version: manifest.version, createdAt: manifest.createdAt, files: files, pack: manifest.pack, deltas: manifest.deltas)
+    }
+
+    /// Serves the manifest, and its pack when given, where the index entry says they are and returns that entry.
+    func publish(_ manifest: BundleManifest, pack: Data? = nil, manifestUrl: String = "\(Fixture.filesBaseUrl)/apps/\(Fixture.appId)/bundles/\(bundleId)/manifest.json") -> IndexRelease {
         let json = String(bytes: try! Json.encoder.encode(manifest), encoding: .utf8) ?? ""
         http.stubJson(manifestUrl, ManifestEnvelope(manifest: json))
+        if let pack = pack, let packUrl = manifest.pack?.url {
+            http.stub(packUrl, body: pack)
+        }
         return IndexRelease(id: "r2", number: 2, createdAt: manifest.createdAt, bundleId: manifest.bundleId, bundleVersion: manifest.version, manifestUrl: manifestUrl, manifestSha256: Hashing.sha256Hex(json), sizeBytes: 0)
     }
 

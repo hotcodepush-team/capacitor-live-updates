@@ -11,23 +11,30 @@ data class PackEntry(val sha256: String, val body: ByteArray)
 
 class PackFormatException(message: String) : Exception(message)
 
+class GzipSizeException(maximumBytes: Long) : Exception("The content inflates past its $maximumBytes bytes")
+
 /** Reads the pack format: an uncompressed ustar archive whose entries are named by their content hash. */
 object PackReader {
     private const val BLOCK_SIZE = 512
 
-    fun entries(bytes: ByteArray): List<PackEntry> = buildList { forEachEntry(ByteArrayInputStream(bytes)) { add(it) } }
+    fun entries(bytes: ByteArray): List<PackEntry> = buildList { forEachEntry(ByteArrayInputStream(bytes), bytes.size.toLong()) { add(it) } }
 
-    fun forEachEntry(input: InputStream, body: (PackEntry) -> Unit) {
+    /** Reads the `length` bytes of the input; an entry the header claims larger than what is left is refused before anything is allocated for it. */
+    fun forEachEntry(input: InputStream, length: Long, body: (PackEntry) -> Unit) {
         val header = ByteArray(BLOCK_SIZE)
+        var remaining = length
         while (true) {
             val read = input.readFully(header)
             if (read < BLOCK_SIZE || header.all { it == 0.toByte() }) return
+            remaining -= BLOCK_SIZE
             val name = field(header, 0, 100)
-            val size = field(header, 124, 12).toIntOrNull(8) ?: throw PackFormatException("Invalid size field")
+            val size = field(header, 124, 12).toIntOrNull(8)?.takeIf { it >= 0 } ?: throw PackFormatException("Invalid size field")
+            val padding = (BLOCK_SIZE - size % BLOCK_SIZE) % BLOCK_SIZE
+            if (size > remaining) throw PackFormatException("Truncated pack")
+            remaining -= size + padding
             val content = ByteArray(size)
             if (input.readFully(content) < size) throw PackFormatException("Truncated pack")
             body(PackEntry(name, content))
-            val padding = (BLOCK_SIZE - size % BLOCK_SIZE) % BLOCK_SIZE
             if (padding > 0 && input.readFully(ByteArray(padding)) < padding) throw PackFormatException("Truncated pack")
         }
     }
@@ -73,9 +80,22 @@ object Gzip {
     /** Gzip bytes carry the `1f 8b` magic; anything else is stored as it is. */
     fun isCompressed(bytes: ByteArray): Boolean = bytes.size >= 2 && bytes[0] == 0x1f.toByte() && bytes[1] == 0x8b.toByte()
 
-    fun decompressIfCompressed(bytes: ByteArray): ByteArray = if (isCompressed(bytes)) decompress(bytes) else bytes
+    fun decompressIfCompressed(bytes: ByteArray, maximumBytes: Long): ByteArray = if (isCompressed(bytes)) decompress(bytes, maximumBytes) else bytes
 
-    fun decompress(bytes: ByteArray): ByteArray = if (bytes.isEmpty()) bytes else GZIPInputStream(ByteArrayInputStream(bytes)).use { it.readBytes() }
+    /** Inflates at most `maximumBytes`, the file's size: a few bytes that would inflate to gigabytes are refused on the way. */
+    fun decompress(bytes: ByteArray, maximumBytes: Long): ByteArray {
+        if (bytes.isEmpty()) return bytes
+        GZIPInputStream(ByteArrayInputStream(bytes)).use { input ->
+            val output = ByteArrayOutputStream()
+            val buffer = ByteArray(64 * 1024)
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) return output.toByteArray()
+                if (output.size() + read > maximumBytes) throw GzipSizeException(maximumBytes)
+                output.write(buffer, 0, read)
+            }
+        }
+    }
 
     fun compress(bytes: ByteArray): ByteArray = ByteArrayOutputStream().also { output -> GZIPOutputStream(output).use { it.write(bytes) } }.toByteArray()
 }

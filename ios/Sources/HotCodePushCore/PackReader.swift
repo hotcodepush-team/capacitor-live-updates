@@ -30,7 +30,7 @@ public enum PackReader {
             }
             guard header.count == blockSize else { throw Failure.invalidHeader }
             let name = string(in: header, from: 0, length: 100)
-            guard let size = Int(string(in: header, from: 124, length: 12), radix: 8) else { throw Failure.invalidHeader }
+            guard let size = Int(string(in: header, from: 124, length: 12), radix: 8), size >= 0 else { throw Failure.invalidHeader }
             let start = offset + blockSize
             let end = start + size
             guard end <= data.count else { throw Failure.truncated }

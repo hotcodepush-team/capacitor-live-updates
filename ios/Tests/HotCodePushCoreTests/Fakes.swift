@@ -35,10 +35,11 @@ final class FakeHttpClient: HttpClient {
         return HttpResponse(status: stub.status, headers: stub.headers, body: stub.body)
     }
 
-    func download(_ url: URL, to file: URL, progress: @escaping (Int, Int) -> Void) async throws {
+    func download(_ url: URL, to file: URL, maximumBytes: Int, progress: @escaping (Int, Int) -> Void) async throws {
         requests.append((url, [:]))
         if isOffline { throw URLError(.notConnectedToInternet) }
         guard let stub = stubs[url.absoluteString], stub.status == 200 else { throw DownloadFailure.downloadFailed("HTTP 404") }
+        guard stub.body.count <= maximumBytes else { throw DownloadFailure.downloadFailed("\(url.lastPathComponent) is larger than its \(maximumBytes) bytes") }
         try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
         try stub.body.write(to: file)
         progress(stub.body.count, stub.body.count)
@@ -185,14 +186,15 @@ struct Fixture {
 
     static func release(number: Int, bundleId: String, content: Data, createdAt: Date = builtAt.addingTimeInterval(60), rollout: Int = 100, conditions: [Condition] = [], isMandatory: Bool = false) -> (release: IndexRelease, manifest: BundleManifest, envelope: ManifestEnvelope, pack: Data) {
         let sha256 = Hashing.sha256Hex(content)
-        let manifest = BundleManifest(bundleId: bundleId, appId: appId, version: "1.\(number).0", createdAt: createdAt, files: [.init(path: "index.html", sha256: sha256, sizeBytes: content.count), .init(path: "assets/app.js", sha256: Hashing.sha256Hex("js-\(bundleId)"), sizeBytes: 5)], pack: .init(url: "\(filesBaseUrl)/apps/\(appId)/bundles/\(bundleId)/pack", sizeBytes: 0))
+        let js = Data("js-\(bundleId)".utf8)
+        let pack = PackWriter.pack([
+            PackEntry(sha256: sha256, body: try! Gzip.compress(content)),
+            PackEntry(sha256: Hashing.sha256Hex(js), body: try! Gzip.compress(js))
+        ])
+        let manifest = BundleManifest(bundleId: bundleId, appId: appId, version: "1.\(number).0", createdAt: createdAt, files: [.init(path: "index.html", sha256: sha256, sizeBytes: content.count), .init(path: "assets/app.js", sha256: Hashing.sha256Hex(js), sizeBytes: js.count)], pack: .init(url: "\(filesBaseUrl)/apps/\(appId)/bundles/\(bundleId)/pack", sizeBytes: pack.count))
         let manifestJson = String(bytes: try! Json.encoder.encode(manifest), encoding: .utf8) ?? ""
         let envelope = ManifestEnvelope(manifest: manifestJson, signature: nil)
         let release = IndexRelease(id: "r\(number)", number: number, createdAt: createdAt, isMandatory: isMandatory, notes: "notes \(number)", rollout: rollout, conditions: conditions, bundleId: bundleId, bundleVersion: manifest.version, manifestUrl: "\(filesBaseUrl)/apps/\(appId)/bundles/\(bundleId)/manifest.json", manifestSha256: Hashing.sha256Hex(manifestJson), sizeBytes: content.count)
-        let pack = PackWriter.pack([
-            PackEntry(sha256: sha256, body: try! Gzip.compress(content)),
-            PackEntry(sha256: Hashing.sha256Hex("js-\(bundleId)"), body: try! Gzip.compress(Data("js-\(bundleId)".utf8)))
-        ])
         return (release, manifest, envelope, pack)
     }
 

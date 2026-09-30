@@ -72,6 +72,13 @@ public final class FileStore {
         try? fileManager.removeItem(at: rootDirectory)
     }
 
+    /// The bytes free on the store's volume for a download the user expects, measured on its nearest existing directory; nil where the platform cannot tell.
+    public func availableBytes() -> Int? {
+        let directory = sequence(first: rootDirectory) { $0.deletingLastPathComponent() }.first { fileManager.fileExists(atPath: $0.path) }
+        let values = try? directory?.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+        return values?.volumeAvailableCapacityForImportantUsage.map { Int($0) }
+    }
+
     /// Whether every file the manifest lists is on disk; existence is the check, not a re-hash.
     public func isComplete(_ manifest: BundleManifest, embedded: EmbeddedBundle) -> Bool {
         return manifest.files.allSatisfy { hasFile(sha256: $0.sha256) || embedded.has(sha256: $0.sha256) }

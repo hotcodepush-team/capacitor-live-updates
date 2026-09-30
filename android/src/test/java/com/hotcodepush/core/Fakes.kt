@@ -35,10 +35,11 @@ class FakeHttpClient : HttpClient {
         return HttpResponse(stub.status, stub.headers, stub.body)
     }
 
-    override suspend fun download(url: String, file: File, progress: (Long, Long) -> Unit) {
+    override suspend fun download(url: String, file: File, maximumBytes: Long, progress: (Long, Long) -> Unit) {
         requests += url to emptyMap()
         if (isOffline) throw java.io.IOException("offline")
         val stub = stubs[url]?.takeIf { it.status == 200 } ?: throw DownloadFailure.DownloadFailed("HTTP 404")
+        if (stub.body.size > maximumBytes) throw DownloadFailure.DownloadFailed("${url.substringAfterLast('/')} is larger than its $maximumBytes bytes")
         file.parentFile?.mkdirs()
         file.writeBytes(stub.body)
         progress(stub.body.size.toLong(), stub.body.size.toLong())
@@ -156,11 +157,11 @@ object Fixture {
     fun release(number: Int, bundleId: String, content: ByteArray, createdAt: Long = BUILT_AT + 60_000, rollout: Int = 100, conditions: List<Condition> = emptyList(), isMandatory: Boolean = false): Published {
         val sha256 = Hashing.sha256Hex(content)
         val js = "js-$bundleId".toByteArray()
-        val manifest = BundleManifest(bundleId, APP_ID, "1.$number.0", createdAt, listOf(BundleManifest.File("index.html", sha256, content.size.toLong()), BundleManifest.File("assets/app.js", Hashing.sha256Hex(js), js.size.toLong())), BundleManifest.Pack("$FILES_BASE_URL/apps/$APP_ID/bundles/$bundleId/pack", 0), emptyList())
+        val pack = PackWriter.pack(listOf(PackEntry(sha256, Gzip.compress(content)), PackEntry(Hashing.sha256Hex(js), Gzip.compress(js))))
+        val manifest = BundleManifest(bundleId, APP_ID, "1.$number.0", createdAt, listOf(BundleManifest.File("index.html", sha256, content.size.toLong()), BundleManifest.File("assets/app.js", Hashing.sha256Hex(js), js.size.toLong())), BundleManifest.Pack("$FILES_BASE_URL/apps/$APP_ID/bundles/$bundleId/pack", pack.size.toLong()), emptyList())
         val manifestJson = manifest.toJson().toString()
         val envelope = ManifestEnvelope(manifestJson, null)
         val release = IndexRelease("r$number", number, createdAt, isMandatory, "notes $number", rollout, conditions, bundleId, manifest.version, "$FILES_BASE_URL/apps/$APP_ID/bundles/$bundleId/manifest.json", Hashing.sha256Hex(manifestJson), content.size.toLong())
-        val pack = PackWriter.pack(listOf(PackEntry(sha256, Gzip.compress(content)), PackEntry(Hashing.sha256Hex(js), Gzip.compress(js))))
         return Published(release, manifest, envelope, pack)
     }
 

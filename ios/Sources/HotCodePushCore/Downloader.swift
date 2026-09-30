@@ -45,10 +45,13 @@ public final class Downloader {
     public func downloadRelease(_ target: IndexRelease, currentBundleId: String?, progress: @escaping (Int, Int) -> Void) async throws -> DownloadOutcome {
         let manifest = try await fetchBundleManifest(target)
         let missing = resolveMissingFiles(manifest)
+        let pack = missing.isEmpty ? nil : resolvePack(manifest, currentBundleId: currentBundleId, missing: missing)
+        try verifyFreeSpace(forBytes: missing.reduce(0) { $0 + $1.sizeBytes } + (pack?.source.sizeBytes ?? 0))
         var bytes = 0
         var packKind = PackKind.files
-        if !missing.isEmpty, let pack = resolvePack(manifest, currentBundleId: currentBundleId, missing: missing) {
-            bytes += try await downloadPack(pack.url, bundleId: manifest.bundleId, wanted: Set(missing.map { $0.sha256 }), progress: progress)
+        if let pack = pack {
+            let wanted = Dictionary(missing.map { ($0.sha256, $0.sizeBytes) }, uniquingKeysWith: { first, _ in first })
+            bytes += try await downloadPack(pack.source, bundleId: manifest.bundleId, wanted: wanted, progress: progress)
             packKind = pack.kind
         }
         for file in resolveMissingFiles(manifest) {
@@ -89,21 +92,28 @@ public final class Downloader {
     }
 
     /// The delta pack against the running bundle where one exists, the full pack otherwise; nothing when the pack would cost more than the files.
-    func resolvePack(_ manifest: BundleManifest, currentBundleId: String?, missing: [BundleManifest.File]) -> (url: String, kind: PackKind)? {
+    func resolvePack(_ manifest: BundleManifest, currentBundleId: String?, missing: [BundleManifest.File]) -> (source: BundleManifest.Pack, kind: PackKind)? {
         if let currentBundleId = currentBundleId, let delta = manifest.deltas.first(where: { $0.baseBundleId == currentBundleId }) {
-            return (delta.url, .delta)
+            return (.init(url: delta.url, sizeBytes: delta.sizeBytes), .delta)
         }
         if let pack = manifest.pack, missing.count > 1 {
-            return (pack.url, .full)
+            return (pack, .full)
         }
         return nil
     }
 
-    func downloadPack(_ urlString: String, bundleId: String, wanted: Set<String>, progress: @escaping (Int, Int) -> Void) async throws -> Int {
-        let url = try resolvePinnedUrl(urlString)
-        let file = temporaryDirectory.appendingPathComponent("\(bundleId)-\(Hashing.sha256Hex(urlString).prefix(16)).pack")
+    /// The download needs its bytes on disk at its peak: every missing file and the pack they arrive in.
+    func verifyFreeSpace(forBytes requiredBytes: Int) throws {
+        guard let availableBytes = files.availableBytes(), availableBytes < requiredBytes else { return }
+        throw DownloadFailure.downloadFailed("The download needs \(requiredBytes) bytes and \(availableBytes) are free")
+    }
+
+    /// Streams the pack to disk, never past its size in the manifest, then inflates each wanted entry up to its file's size.
+    func downloadPack(_ source: BundleManifest.Pack, bundleId: String, wanted: [String: Int], progress: @escaping (Int, Int) -> Void) async throws -> Int {
+        let url = try resolvePinnedUrl(source.url)
+        let file = temporaryDirectory.appendingPathComponent("\(bundleId)-\(Hashing.sha256Hex(source.url).prefix(16)).pack")
         do {
-            try await http.download(url, to: file, progress: progress)
+            try await http.download(url, to: file, maximumBytes: source.sizeBytes, progress: progress)
         } catch let failure as DownloadFailure {
             throw failure
         } catch {
@@ -113,8 +123,8 @@ public final class Downloader {
         guard let data = try? Data(contentsOf: file, options: .mappedIfSafe) else { throw DownloadFailure.downloadFailed("The pack could not be read") }
         do {
             try PackReader.forEachEntry(in: data) { entry in
-                guard wanted.contains(entry.sha256) else { return }
-                try files.writeFile(try Gzip.decompressIfCompressed(entry.body), sha256: entry.sha256)
+                guard let sizeBytes = wanted[entry.sha256] else { return }
+                try files.writeFile(try Gzip.decompressIfCompressed(entry.body, maximumBytes: sizeBytes), sha256: entry.sha256)
             }
         } catch let failure as DownloadFailure {
             throw failure
@@ -133,21 +143,26 @@ public final class Downloader {
         return url
     }
 
+    /// One file through the same bounded stream as the pack, never past its size in the manifest.
     func downloadFile(_ file: BundleManifest.File) async throws -> Int {
         guard let url = URL(string: "\(configuration.filesBaseUrl)/apps/\(configuration.appId)/files/\(file.sha256)") else { throw DownloadFailure.downloadFailed("Invalid file URL") }
-        let response: HttpResponse
+        let temporary = temporaryDirectory.appendingPathComponent("\(file.sha256).file")
+        try? FileManager.default.removeItem(at: temporary)
+        defer { try? FileManager.default.removeItem(at: temporary) }
         do {
-            response = try await http.get(url, headers: [:])
+            try await http.download(url, to: temporary, maximumBytes: file.sizeBytes) { _, _ in }
+        } catch let failure as DownloadFailure {
+            throw failure
         } catch {
             throw DownloadFailure.downloadFailed("The file \(file.path) could not be downloaded: \(error.localizedDescription)")
         }
-        guard response.status == 200 else { throw DownloadFailure.downloadFailed("HTTP \(response.status) for \(file.path)") }
-        let content = (try? Gzip.decompressIfCompressed(response.body)) ?? response.body
+        guard let body = try? Data(contentsOf: temporary) else { throw DownloadFailure.downloadFailed("The file \(file.path) could not be read") }
+        let content = (try? Gzip.decompressIfCompressed(body, maximumBytes: file.sizeBytes)) ?? body
         do {
             try files.writeFile(content, sha256: file.sha256)
         } catch {
             throw DownloadFailure.verificationFailed("The file \(file.path) did not match its hash")
         }
-        return response.body.count
+        return body.count
     }
 }

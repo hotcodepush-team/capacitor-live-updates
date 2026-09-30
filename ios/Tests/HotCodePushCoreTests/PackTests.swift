@@ -9,7 +9,7 @@ final class PackTests: XCTestCase {
         XCTAssertEqual(pack.count % 512, 0)
         let read = try PackReader.entries(in: pack)
         XCTAssertEqual(read.map { $0.sha256 }, entries.map { $0.sha256 })
-        XCTAssertEqual(try Gzip.decompress(read[0].body), content)
+        XCTAssertEqual(try Gzip.decompress(read[0].body, maximumBytes: content.count), content)
     }
 
     func testShouldRejectATruncatedPack() {
@@ -17,9 +17,23 @@ final class PackTests: XCTestCase {
         XCTAssertThrowsError(try PackReader.entries(in: pack.prefix(600)))
     }
 
+    func testShouldRefuseAnEntryWithANegativeSize() {
+        var pack = PackWriter.pack([PackEntry(sha256: "abc", body: Data(count: 700))])
+        pack.replaceSubrange(124..<135, with: Data("-0000001000".utf8))
+        XCTAssertThrowsError(try PackReader.entries(in: pack))
+    }
+
     func testShouldDecompressGzipAndRejectGarbage() throws {
         let content = Data((0..<10_000).map { UInt8($0 % 251) })
-        XCTAssertEqual(try Gzip.decompress(try Gzip.compress(content)), content)
-        XCTAssertThrowsError(try Gzip.decompress(Data("not gzip".utf8)))
+        XCTAssertEqual(try Gzip.decompress(try Gzip.compress(content), maximumBytes: content.count), content)
+        XCTAssertThrowsError(try Gzip.decompress(Data("not gzip".utf8), maximumBytes: 100))
+    }
+
+    func testShouldRefuseToInflatePastTheMaximum() throws {
+        let content = Data(count: 1_000_000)
+        XCTAssertEqual(try Gzip.decompress(try Gzip.compress(content), maximumBytes: content.count), content)
+        XCTAssertThrowsError(try Gzip.decompress(try Gzip.compress(content), maximumBytes: content.count - 1)) { error in
+            XCTAssertEqual(error as? Gzip.Failure, .tooLarge(maximumBytes: content.count - 1))
+        }
     }
 }
