@@ -94,6 +94,45 @@ class CoreTest {
     }
 
     @Test
+    fun shouldStartOnTheEmbeddedBundleWhenTheCurrentReleaseHasNoFilesOnDisk() = runBlocking {
+        val harness = Harness(Fixture.configuration(installStrategy = InstallStrategy.IMMEDIATE))
+        val v2 = Fixture.release(1, "b2", v2Content)
+        harness.publish(listOf(v2), 1)
+        harness.core.handleAppStart()
+        harness.core.sync(SyncTrigger.CALL)
+        harness.core.ready()
+        harness.files.deleteEverything()
+        harness.loader.deleteProjection("b2")
+        harness.restart()
+        harness.core.handleAppStart()
+        val status = harness.core.status()
+        assertNull(status.currentRelease)
+        assertNull(status.fallbackRelease)
+        assertTrue(harness.loader.hasPersisted && harness.loader.persisted == null)
+        assertEquals(listOf("b2", null), harness.loader.loaded)
+        assertTrue(harness.listener.rolledBack.isEmpty())
+    }
+
+    @Test
+    fun shouldStartOnTheEmbeddedBundleWhenTheNextReleaseHasNoFilesOnDisk() = runBlocking {
+        val harness = Harness()
+        val v2 = Fixture.release(1, "b2", v2Content)
+        harness.publish(listOf(v2), 1)
+        harness.core.handleAppStart()
+        harness.core.sync(SyncTrigger.CALL)
+        harness.files.deleteEverything()
+        harness.loader.deleteProjection("b2")
+        harness.loader.served = "b2"
+        harness.restart()
+        harness.core.handleAppStart()
+        val status = harness.core.status()
+        assertNull(status.currentRelease)
+        assertNull(status.nextRelease)
+        assertTrue(harness.loader.hasPersisted && harness.loader.persisted == null)
+        assertEquals(listOf(null), harness.loader.loaded)
+    }
+
+    @Test
     fun shouldRollBackAReleaseThatNeverRendersAndBlocklistIt() = runBlocking {
         val harness = Harness(Fixture.configuration(installStrategy = InstallStrategy.IMMEDIATE))
         val v2 = Fixture.release(1, "b2", v2Content)

@@ -63,6 +63,22 @@ final class FileStoreTests: XCTestCase {
         XCTAssertFalse(files.hasFile(sha256: Hashing.sha256Hex("b")))
     }
 
+    func testShouldKeepTheStoreOutOfDeviceBackups() throws {
+        let files = FileStore(rootDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString))
+        try files.writeFile(Data("a".utf8), sha256: Hashing.sha256Hex("a"))
+        XCTAssertEqual(try files.rootDirectory.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup, true)
+    }
+
+    func testShouldKeepAServedTreeOutOfDeviceBackups() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let files = FileStore(rootDirectory: root.appendingPathComponent("store"))
+        try files.writeFile(Data("new".utf8), sha256: Hashing.sha256Hex("new"))
+        let manifest = BundleManifest(bundleId: "b", appId: "a", version: "1", createdAt: Date(), files: [.init(path: "index.html", sha256: Hashing.sha256Hex("new"), sizeBytes: 3)])
+        let www = root.appendingPathComponent("www")
+        try BundleProjection.project(manifest, from: files, embedded: InMemoryEmbeddedBundle(), into: www)
+        XCTAssertEqual(try www.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup, true)
+    }
+
     func testShouldProjectABundleByPathFromTheStoreAndTheEmbeddedFiles() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let files = FileStore(rootDirectory: root.appendingPathComponent("store"))

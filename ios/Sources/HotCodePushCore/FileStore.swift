@@ -28,7 +28,7 @@ public final class FileStore {
     public func writeFile(_ content: Data, sha256: String) throws {
         let actual = Hashing.sha256Hex(content)
         guard actual == sha256 else { throw Failure.hashMismatch(expected: sha256, actual: actual) }
-        try fileManager.createDirectory(at: filesDirectory, withIntermediateDirectories: true)
+        try createDirectory(filesDirectory)
         try content.write(to: fileURL(sha256: sha256), options: .atomic)
     }
 
@@ -43,8 +43,14 @@ public final class FileStore {
 
     public func writeManifest(_ manifest: BundleManifest) throws {
         let url = manifestURL(bundleId: manifest.bundleId)
-        try fileManager.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try createDirectory(url.deletingLastPathComponent())
         try Json.encoder.encode(manifest).write(to: url, options: .atomic)
+    }
+
+    /// Creates a directory inside the store; the store stays out of device backups, since everything in it downloads again.
+    private func createDirectory(_ directory: URL) throws {
+        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        try BackupExclusion.exclude(rootDirectory)
     }
 
     public func bundleIds() -> [String] {
@@ -98,6 +104,7 @@ public enum BundleProjection {
         let fileManager = FileManager.default
         try? fileManager.removeItem(at: directory)
         try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        try BackupExclusion.exclude(directory)
         for file in manifest.files {
             let destination = directory.appendingPathComponent(file.path)
             try fileManager.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -110,5 +117,15 @@ public enum BundleProjection {
                 try embedded.copyFile(sha256: file.sha256, to: destination)
             }
         }
+    }
+}
+
+/// Keeps a directory and everything in it out of iCloud and computer backups and device-to-device transfers.
+enum BackupExclusion {
+    static func exclude(_ directory: URL) throws {
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        var directory = directory
+        try directory.setResourceValues(values)
     }
 }

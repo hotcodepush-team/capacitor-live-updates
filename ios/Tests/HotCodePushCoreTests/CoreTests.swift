@@ -80,6 +80,43 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(harness.files.bundleIds(), ["b2"])
     }
 
+    func testShouldStartOnTheEmbeddedBundleWhenTheCurrentReleaseHasNoFilesOnDisk() async {
+        let harness = Harness(configuration: Fixture.configuration(installStrategy: .immediate))
+        let v2 = Fixture.release(number: 1, bundleId: "b2", content: Data("<html>v2</html>".utf8))
+        harness.publish([v2], sequence: 1)
+        await harness.core.handleAppStart()
+        _ = await harness.core.sync(trigger: .call)
+        _ = await harness.core.ready()
+        harness.files.deleteEverything()
+        harness.loader.deleteProjection(bundleId: "b2")
+        harness.restart()
+        await harness.core.handleAppStart()
+        let status = await harness.core.status()
+        XCTAssertNil(status.currentRelease)
+        XCTAssertNil(status.fallbackRelease)
+        XCTAssertEqual(harness.loader.persisted, .some(nil))
+        XCTAssertEqual(harness.loader.loaded, ["b2", nil])
+        XCTAssertTrue(harness.listener.rolledBack.isEmpty)
+    }
+
+    func testShouldStartOnTheEmbeddedBundleWhenTheNextReleaseHasNoFilesOnDisk() async {
+        let harness = Harness()
+        let v2 = Fixture.release(number: 1, bundleId: "b2", content: Data("<html>v2</html>".utf8))
+        harness.publish([v2], sequence: 1)
+        await harness.core.handleAppStart()
+        _ = await harness.core.sync(trigger: .call)
+        harness.files.deleteEverything()
+        harness.loader.deleteProjection(bundleId: "b2")
+        harness.loader.served = "b2"
+        harness.restart()
+        await harness.core.handleAppStart()
+        let status = await harness.core.status()
+        XCTAssertNil(status.currentRelease)
+        XCTAssertNil(status.nextRelease)
+        XCTAssertEqual(harness.loader.persisted, .some(nil))
+        XCTAssertEqual(harness.loader.loaded, [nil])
+    }
+
     func testShouldRollBackAReleaseThatNeverRendersAndBlocklistIt() async {
         let harness = Harness(configuration: Fixture.configuration(installStrategy: .immediate))
         let v2 = Fixture.release(number: 1, bundleId: "b2", content: Data("<html>v2</html>".utf8))

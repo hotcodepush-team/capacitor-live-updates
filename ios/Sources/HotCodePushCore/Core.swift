@@ -40,11 +40,11 @@ public actor Core {
 
     // MARK: Lifecycle
 
-    /// The start of a run: the binary's floor, the previous run's verdict, the pending switch, the gate, then the cleanup.
+    /// The start of a run: the binary's floor, the files on disk, the previous run's verdict, the pending switch, the gate, then the cleanup.
     public func handleAppStart() {
         state.lastRollback = nil
-        if state.lastBuiltAt != configuration.builtAt {
-            dropReleasesOfPreviousBinary()
+        if state.lastBuiltAt != configuration.builtAt || hasReleaseWithoutManifest() {
+            dropStoredReleases()
         }
         if isCurrentReleaseUnconfirmed() {
             rollbackCurrentRelease(reason: .crashed)
@@ -301,8 +301,13 @@ public actor Core {
 
     // MARK: The four functions and the gate
 
-    /// A new binary carries a new floor: the releases downloaded under the previous one are forgotten and the embedded bundle runs.
-    private func dropReleasesOfPreviousBinary() {
+    /// A restored phone brings the store's keys back without its files: a current or next release with no manifest on disk names a tree that is not there.
+    private func hasReleaseWithoutManifest() -> Bool {
+        return [state.currentRelease, state.nextRelease].compactMap { $0 }.contains { files.readManifest(bundleId: $0.bundleId) == nil }
+    }
+
+    /// A new binary carries a new floor and a restored phone carries no files: the stored releases are forgotten and the embedded bundle runs.
+    private func dropStoredReleases() {
         state.currentRelease = nil
         state.nextRelease = nil
         state.fallbackRelease = nil

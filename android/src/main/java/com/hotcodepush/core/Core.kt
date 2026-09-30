@@ -40,10 +40,10 @@ class Core(
 
     // Lifecycle
 
-    /** The start of a run: the binary's floor, the previous run's verdict, the pending switch, the gate, then the cleanup. */
+    /** The start of a run: the binary's floor, the files on disk, the previous run's verdict, the pending switch, the gate, then the cleanup. */
     suspend fun handleAppStart() = lock.withLock {
         state.lastRollback = null
-        if (state.lastBuiltAt != configuration.builtAt) dropReleasesOfPreviousBinary()
+        if (state.lastBuiltAt != configuration.builtAt || hasReleaseWithoutManifest()) dropStoredReleases()
         if (isCurrentReleaseUnconfirmed()) {
             rollbackCurrentRelease(RollbackReason.CRASHED)
             return
@@ -283,8 +283,11 @@ class Core(
 
     // The four functions and the gate
 
-    /** A new binary carries a new floor: the releases downloaded under the previous one are forgotten and the embedded bundle runs. */
-    private fun dropReleasesOfPreviousBinary() {
+    /** A restored phone brings the store's keys back without its files: a current or next release with no manifest on disk names a tree that is not there. */
+    private fun hasReleaseWithoutManifest(): Boolean = listOfNotNull(state.currentRelease, state.nextRelease).any { files.readManifest(it.bundleId) == null }
+
+    /** A new binary carries a new floor and a restored phone carries no files: the stored releases are forgotten and the embedded bundle runs. */
+    private fun dropStoredReleases() {
         state.currentRelease = null
         state.nextRelease = null
         state.fallbackRelease = null
