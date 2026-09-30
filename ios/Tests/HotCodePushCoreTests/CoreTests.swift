@@ -241,16 +241,70 @@ final class CoreTests: XCTestCase {
         XCTAssertNil(status.currentRelease)
     }
 
-    func testShouldQueueARestartWhileRestartsAreNotAllowed() async {
+    func testShouldQueueTheSwitchWithTheReloadWhileRestartsAreNotAllowed() async {
         let harness = Harness(configuration: Fixture.configuration(installStrategy: .immediate))
         let v2 = Fixture.release(number: 1, bundleId: "b2", content: Data("<html>v2</html>".utf8))
         harness.publish([v2], sequence: 1)
         await harness.core.handleAppStart()
         await harness.core.setRestartAllowed(false)
-        _ = await harness.core.sync(trigger: .call)
+        let result = await harness.core.sync(trigger: .call)
+        XCTAssertEqual(result.installAt, .now)
         XCTAssertEqual(harness.loader.loaded, [])
+        let queued = await harness.core.status()
+        XCTAssertNil(queued.currentRelease)
+        XCTAssertEqual(queued.nextRelease, v2.release.release)
+        XCTAssertEqual(harness.scheduler.tasks.count, 0)
+        XCTAssertFalse(StateStore(store: harness.store).unsentEvents.contains { $0.type == "applied" })
         await harness.core.setRestartAllowed(true)
         XCTAssertEqual(harness.loader.loaded, ["b2"])
+        let installed = await harness.core.status()
+        XCTAssertEqual(installed.currentRelease, v2.release.release)
+        XCTAssertNil(installed.nextRelease)
+        XCTAssertEqual(harness.scheduler.tasks.count, 1)
+    }
+
+    func testShouldApplyAtOnceWhileRestartsAreNotAllowed() async {
+        let harness = Harness(configuration: Fixture.configuration(installStrategy: .manual))
+        let v2 = Fixture.release(number: 1, bundleId: "b2", content: Data("<html>v2</html>".utf8))
+        harness.publish([v2], sequence: 1)
+        await harness.core.handleAppStart()
+        await harness.core.setRestartAllowed(false)
+        let result = await harness.core.sync(trigger: .call)
+        XCTAssertEqual(result.installAt, .manual)
+        await harness.core.apply()
+        XCTAssertEqual(harness.loader.loaded, ["b2"])
+        let status = await harness.core.status()
+        XCTAssertEqual(status.currentRelease, v2.release.release)
+        XCTAssertNil(status.nextRelease)
+    }
+
+    func testShouldRollBackAtOnceWhileRestartsAreNotAllowed() async {
+        let harness = Harness(configuration: Fixture.configuration(installStrategy: .immediate))
+        let v2 = Fixture.release(number: 1, bundleId: "b2", content: Data("<html>v2</html>".utf8))
+        harness.publish([v2], sequence: 1)
+        await harness.core.handleAppStart()
+        _ = await harness.core.sync(trigger: .call)
+        _ = await harness.core.ready()
+        await harness.core.setRestartAllowed(false)
+        await harness.core.rollback(reason: "fatal")
+        XCTAssertEqual(harness.loader.loaded, ["b2", nil])
+        let status = await harness.core.status()
+        XCTAssertNil(status.currentRelease)
+        XCTAssertEqual(status.failedBundleIds, ["b2"])
+    }
+
+    func testShouldResetAtOnceWhileRestartsAreNotAllowed() async {
+        let harness = Harness(configuration: Fixture.configuration(installStrategy: .immediate))
+        let v2 = Fixture.release(number: 1, bundleId: "b2", content: Data("<html>v2</html>".utf8))
+        harness.publish([v2], sequence: 1)
+        await harness.core.handleAppStart()
+        _ = await harness.core.sync(trigger: .call)
+        await harness.core.setRestartAllowed(false)
+        await harness.core.reset()
+        XCTAssertEqual(harness.loader.loaded, ["b2", nil])
+        let status = await harness.core.status()
+        XCTAssertNil(status.currentRelease)
+        XCTAssertEqual(harness.files.bundleIds(), [])
     }
 
     func testShouldSkipOnAMeteredConnectionUnderTheUnmeteredPolicy() async {

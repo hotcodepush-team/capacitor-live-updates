@@ -18,7 +18,7 @@ public actor Core {
     private var intervalTimer: ScheduledTask?
     private var runningSync: Task<SyncResult, Never>?
     private var isRestartAllowed = true
-    private var isRestartQueued = false
+    private var queuedRestart: (() -> Void)?
     private var isStartSyncPending = false
     private var resolvedChannelName: (name: String, id: String)?
 
@@ -192,8 +192,7 @@ public actor Core {
         setNextRelease(release)
         switch strategy {
         case .immediate:
-            switchToNextRelease()
-            reloadApp()
+            installNextRelease()
             return .updated(release, notes: notes, installAt: .now)
         case .nextStart:
             loader.persistServedBundle(bundleId: release.bundleId)
@@ -233,10 +232,9 @@ public actor Core {
 
     public func setRestartAllowed(_ allowed: Bool) {
         isRestartAllowed = allowed
-        if allowed && isRestartQueued {
-            isRestartQueued = false
-            reloadApp()
-        }
+        guard allowed, let restart = queuedRestart else { return }
+        queuedRestart = nil
+        restart()
     }
 
     // MARK: State
@@ -315,13 +313,26 @@ public actor Core {
     }
 
     private func reloadApp() {
-        guard isRestartAllowed else {
-            isRestartQueued = true
-            return
-        }
         loader.loadServedBundle(bundleId: state.currentRelease?.bundleId)
         if isCurrentReleaseUnconfirmed() {
             startReadyTimer()
+        }
+    }
+
+    /// The install the SDK performs on its own: the switch and the reload as one act behind the gate, so nothing changes until it runs.
+    private func installNextRelease() {
+        restartThroughGate { [self] in
+            switchToNextRelease()
+            reloadApp()
+        }
+    }
+
+    /// A restart the SDK performs on its own waits while the app holds restarts; the first one held runs when it lets go.
+    private func restartThroughGate(_ restart: @escaping () -> Void) {
+        if isRestartAllowed {
+            restart()
+        } else if queuedRestart == nil {
+            queuedRestart = restart
         }
     }
 
@@ -365,7 +376,11 @@ public actor Core {
         enqueueDeviceEvent(.rolledBack(fromReleaseId: current.id, toReleaseId: fallback?.id))
         loader.persistServedBundle(bundleId: fallback?.bundleId)
         listener.rolledBack(RolledBackEvent(from: current, to: fallback, reason: reason))
-        reloadApp()
+        if reason == .reportedByApp {
+            reloadApp()
+        } else {
+            restartThroughGate { [self] in reloadApp() }
+        }
     }
 
     /// The release to fall back to right now: the last confirmed one while it can still run, else the embedded bundle.
@@ -385,7 +400,7 @@ public actor Core {
         state.currentRelease = nil
         state.nextRelease = nil
         loader.persistServedBundle(bundleId: nil)
-        reloadApp()
+        restartThroughGate { [self] in reloadApp() }
     }
 
     private func startReadyTimer() {

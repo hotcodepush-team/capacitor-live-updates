@@ -32,7 +32,7 @@ class Core(
     private var intervalTimer: ScheduledTask? = null
     private var runningSync: Deferred<SyncResult>? = null
     private var isRestartAllowed = true
-    private var isRestartQueued = false
+    private var queuedRestart: (() -> Unit)? = null
     private var isStartSyncPending = false
     private var resolvedChannelName: Pair<String, String>? = null
 
@@ -174,8 +174,7 @@ class Core(
         setNextRelease(release)
         return when (strategy) {
             InstallStrategy.IMMEDIATE -> {
-                switchToNextRelease()
-                reloadApp()
+                installNextRelease()
                 SyncResult.updated(release, notes, InstallMoment.NOW)
             }
             InstallStrategy.NEXT_START -> {
@@ -212,10 +211,10 @@ class Core(
 
     suspend fun setRestartAllowed(allowed: Boolean) = lock.withLock {
         isRestartAllowed = allowed
-        if (allowed && isRestartQueued) {
-            isRestartQueued = false
-            reloadApp()
-        }
+        val restart = queuedRestart ?: return
+        if (!allowed) return
+        queuedRestart = null
+        restart()
     }
 
     // State
@@ -291,12 +290,19 @@ class Core(
     }
 
     private fun reloadApp() {
-        if (!isRestartAllowed) {
-            isRestartQueued = true
-            return
-        }
         loader.loadServedBundle(state.currentRelease?.bundleId)
         if (isCurrentReleaseUnconfirmed()) startReadyTimer()
+    }
+
+    /** The install the SDK performs on its own: the switch and the reload as one act behind the gate, so nothing changes until it runs. */
+    private fun installNextRelease() = restartThroughGate {
+        switchToNextRelease()
+        reloadApp()
+    }
+
+    /** A restart the SDK performs on its own waits while the app holds restarts; the first one held runs when it lets go. */
+    private fun restartThroughGate(restart: () -> Unit) {
+        if (isRestartAllowed) restart() else if (queuedRestart == null) queuedRestart = restart
     }
 
     private fun adoptInPlace(release: Release) {
@@ -336,7 +342,7 @@ class Core(
         enqueueDeviceEvent(DeviceEvent.rolledBack(current.id, fallback?.id))
         loader.persistServedBundle(fallback?.bundleId)
         listener.rolledBack(RolledBackEvent(current, fallback, reason))
-        reloadApp()
+        if (reason == RollbackReason.REPORTED_BY_APP) reloadApp() else restartThroughGate { reloadApp() }
     }
 
     /** The release to fall back to right now: the last confirmed one while it can still run, else the embedded bundle. */
@@ -353,7 +359,7 @@ class Core(
         state.currentRelease = null
         state.nextRelease = null
         loader.persistServedBundle(null)
-        reloadApp()
+        restartThroughGate { reloadApp() }
     }
 
     private fun startReadyTimer() {

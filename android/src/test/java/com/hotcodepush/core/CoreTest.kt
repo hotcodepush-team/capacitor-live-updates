@@ -253,16 +253,71 @@ class CoreTest {
     }
 
     @Test
-    fun shouldQueueARestartWhileRestartsAreNotAllowed() = runBlocking {
+    fun shouldQueueTheSwitchWithTheReloadWhileRestartsAreNotAllowed() = runBlocking {
         val harness = Harness(Fixture.configuration(installStrategy = InstallStrategy.IMMEDIATE))
         val v2 = Fixture.release(1, "b2", v2Content)
         harness.publish(listOf(v2), 1)
         harness.core.handleAppStart()
         harness.core.setRestartAllowed(false)
-        harness.core.sync(SyncTrigger.CALL)
+        assertEquals(InstallMoment.NOW, harness.core.sync(SyncTrigger.CALL).installAt)
         assertTrue(harness.loader.loaded.isEmpty())
+        val queued = harness.core.status()
+        assertNull(queued.currentRelease)
+        assertEquals(v2.release.release, queued.nextRelease)
+        assertTrue(harness.scheduler.tasks.isEmpty())
+        assertTrue(StateStore(harness.store).unsentEvents.none { it.type == "applied" })
         harness.core.setRestartAllowed(true)
         assertEquals(listOf("b2"), harness.loader.loaded)
+        val installed = harness.core.status()
+        assertEquals(v2.release.release, installed.currentRelease)
+        assertNull(installed.nextRelease)
+        assertEquals(1, harness.scheduler.tasks.size)
+    }
+
+    @Test
+    fun shouldApplyAtOnceWhileRestartsAreNotAllowed() = runBlocking {
+        val harness = Harness(Fixture.configuration(installStrategy = InstallStrategy.MANUAL))
+        val v2 = Fixture.release(1, "b2", v2Content)
+        harness.publish(listOf(v2), 1)
+        harness.core.handleAppStart()
+        harness.core.setRestartAllowed(false)
+        assertEquals(InstallMoment.MANUAL, harness.core.sync(SyncTrigger.CALL).installAt)
+        harness.core.apply()
+        assertEquals(listOf("b2"), harness.loader.loaded)
+        val status = harness.core.status()
+        assertEquals(v2.release.release, status.currentRelease)
+        assertNull(status.nextRelease)
+    }
+
+    @Test
+    fun shouldRollBackAtOnceWhileRestartsAreNotAllowed() = runBlocking {
+        val harness = Harness(Fixture.configuration(installStrategy = InstallStrategy.IMMEDIATE))
+        val v2 = Fixture.release(1, "b2", v2Content)
+        harness.publish(listOf(v2), 1)
+        harness.core.handleAppStart()
+        harness.core.sync(SyncTrigger.CALL)
+        harness.core.ready()
+        harness.core.setRestartAllowed(false)
+        harness.core.rollback("fatal")
+        assertEquals(listOf("b2", null), harness.loader.loaded)
+        val status = harness.core.status()
+        assertNull(status.currentRelease)
+        assertEquals(listOf("b2"), status.failedBundleIds)
+    }
+
+    @Test
+    fun shouldResetAtOnceWhileRestartsAreNotAllowed() = runBlocking {
+        val harness = Harness(Fixture.configuration(installStrategy = InstallStrategy.IMMEDIATE))
+        val v2 = Fixture.release(1, "b2", v2Content)
+        harness.publish(listOf(v2), 1)
+        harness.core.handleAppStart()
+        harness.core.sync(SyncTrigger.CALL)
+        harness.core.setRestartAllowed(false)
+        harness.core.reset()
+        assertEquals(listOf("b2", null), harness.loader.loaded)
+        val status = harness.core.status()
+        assertNull(status.currentRelease)
+        assertTrue(harness.files.bundleIds().isEmpty())
     }
 
     @Test
