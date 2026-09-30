@@ -120,7 +120,7 @@ object Fixture {
 
     fun embeddedManifest() = BundleManifest("embedded", APP_ID, "1.0.0", BUILT_AT, listOf(BundleManifest.File("index.html", Hashing.sha256Hex(embeddedIndexHtml), embeddedIndexHtml.size.toLong())), null, emptyList())
 
-    fun configuration(installStrategy: InstallStrategy = InstallStrategy.NEXT_START, autoSync: Boolean = false, readySignal: ReadySignal = ReadySignal.RENDER, publicKeys: List<String> = emptyList(), fingerprint: String? = "fp1:abc"): Configuration {
+    fun configuration(installStrategy: InstallStrategy = InstallStrategy.NEXT_START, autoSync: Boolean = false, readySignal: ReadySignal = ReadySignal.RENDER, publicKeys: List<String> = emptyList(), fingerprint: String? = "fp1:abc", builtAt: Long = BUILT_AT): Configuration {
         val json = JSONObject()
             .put("appId", APP_ID)
             .put("channelId", CHANNEL_ID)
@@ -130,7 +130,7 @@ object Fixture {
             .put("readySignal", readySignal.wire)
             .put("readyTimeout", 10)
             .put("publicKeys", org.json.JSONArray(publicKeys))
-            .put("builtAt", Iso8601.format(BUILT_AT))
+            .put("builtAt", Iso8601.format(builtAt))
             .put("fingerprint", fingerprint ?: JSONObject.NULL)
             .put("embeddedBundleManifest", embeddedManifest().toJson())
             .put("embeddedBundleId", "embedded")

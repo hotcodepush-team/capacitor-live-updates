@@ -38,9 +38,12 @@ public actor Core {
 
     // MARK: Lifecycle
 
-    /// The start of a run: the previous run's verdict, the pending switch, the gate, then the cleanup.
+    /// The start of a run: the binary's floor, the previous run's verdict, the pending switch, the gate, then the cleanup.
     public func handleAppStart() {
         state.lastRollback = nil
+        if state.lastBuiltAt != configuration.builtAt {
+            dropReleasesOfPreviousBinary()
+        }
         if isCurrentReleaseUnconfirmed() {
             rollbackCurrentRelease(reason: .crashed)
             return
@@ -281,6 +284,16 @@ public actor Core {
     }
 
     // MARK: The four functions and the gate
+
+    /// A new binary carries a new floor: the releases downloaded under the previous one are forgotten and the embedded bundle runs.
+    private func dropReleasesOfPreviousBinary() {
+        state.currentRelease = nil
+        state.nextRelease = nil
+        state.fallbackRelease = nil
+        state.failedBundleIds = []
+        state.lastBuiltAt = configuration.builtAt
+        loader.persistServedBundle(bundleId: nil)
+    }
 
     private func setNextRelease(_ release: Release) {
         state.nextRelease = release

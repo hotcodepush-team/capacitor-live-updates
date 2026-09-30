@@ -38,9 +38,10 @@ class Core(
 
     // Lifecycle
 
-    /** The start of a run: the previous run's verdict, the pending switch, the gate, then the cleanup. */
+    /** The start of a run: the binary's floor, the previous run's verdict, the pending switch, the gate, then the cleanup. */
     suspend fun handleAppStart() = lock.withLock {
         state.lastRollback = null
+        if (state.lastBuiltAt != configuration.builtAt) dropReleasesOfPreviousBinary()
         if (isCurrentReleaseUnconfirmed()) {
             rollbackCurrentRelease(RollbackReason.CRASHED)
             return
@@ -261,6 +262,16 @@ class Core(
     }
 
     // The four functions and the gate
+
+    /** A new binary carries a new floor: the releases downloaded under the previous one are forgotten and the embedded bundle runs. */
+    private fun dropReleasesOfPreviousBinary() {
+        state.currentRelease = null
+        state.nextRelease = null
+        state.fallbackRelease = null
+        state.failedBundleIds = emptyList()
+        state.lastBuiltAt = configuration.builtAt
+        loader.persistServedBundle(null)
+    }
 
     private fun setNextRelease(release: Release) {
         state.nextRelease = release

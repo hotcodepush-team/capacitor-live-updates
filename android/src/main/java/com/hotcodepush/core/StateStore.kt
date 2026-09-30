@@ -70,6 +70,11 @@ class StateStore(private val store: KeyValueStore) {
         get() = readArray("failedBundleIds").toStringList()
         set(value) = putRaw("failedBundleIds", JSONArray(value).toString())
 
+    /** The floor of the binary that last started, to notice a new one. */
+    var lastBuiltAt: Long?
+        get() = Iso8601.parseOrNull(getRaw("lastBuiltAt"))
+        set(value) = putRaw("lastBuiltAt", value?.let(Iso8601::format))
+
     var reportedAt: Long?
         get() = Iso8601.parseOrNull(getRaw("reportedAt"))
         set(value) = putRaw("reportedAt", value?.let(Iso8601::format))
@@ -122,7 +127,7 @@ class StateStore(private val store: KeyValueStore) {
         const val STATE_VERSION = 1
         const val PREFIX = "hotcodepush."
         private val CACHE_KEYS = listOf(
-            "currentRelease", "nextRelease", "fallbackRelease", "failedBundleIds", "reportedAt", "acknowledgedReport",
+            "currentRelease", "nextRelease", "fallbackRelease", "failedBundleIds", "lastBuiltAt", "reportedAt", "acknowledgedReport",
             "lastCheck", "cachedIndex", "unsentEvents", "checkedReleaseIds", "lastRollback", "lastSyncAt",
         )
     }

@@ -106,6 +106,12 @@ public final class StateStore {
         set { write("failedBundleIds", newValue) }
     }
 
+    /// The floor of the binary that last started, to notice a new one.
+    public var lastBuiltAt: Date? {
+        get { return string("lastBuiltAt").flatMap(Iso8601.parse) }
+        set { set("lastBuiltAt", newValue.map(Iso8601.format)) }
+    }
+
     public var reportedAt: Date? {
         get { return string("reportedAt").flatMap(Iso8601.parse) }
         set { set("reportedAt", newValue.map(Iso8601.format)) }
@@ -143,7 +149,7 @@ public final class StateStore {
 
     /// Drops every cache key; the identity keys survive. Called at start on an unknown version, never by the app.
     public func deleteCacheKeys() {
-        for key in ["currentRelease", "nextRelease", "fallbackRelease", "failedBundleIds", "reportedAt", "acknowledgedReport", "lastCheck", "cachedIndex", "unsentEvents", "checkedReleaseIds", "lastRollback", "lastSyncAt"] {
+        for key in ["currentRelease", "nextRelease", "fallbackRelease", "failedBundleIds", "lastBuiltAt", "reportedAt", "acknowledgedReport", "lastCheck", "cachedIndex", "unsentEvents", "checkedReleaseIds", "lastRollback", "lastSyncAt"] {
             set(key, nil)
         }
         set("stateVersion", String(StateStore.stateVersion))

@@ -43,6 +43,43 @@ final class CoreTests: XCTestCase {
         XCTAssertTrue(harness.scheduler.tasks[0].isCancelled)
     }
 
+    func testShouldStartOnTheEmbeddedBundleWhenTheBinaryChanged() async {
+        let harness = Harness(configuration: Fixture.configuration(installStrategy: .immediate))
+        let v2 = Fixture.release(number: 1, bundleId: "b2", content: Data("<html>v2</html>".utf8))
+        harness.publish([v2], sequence: 1)
+        await harness.core.handleAppStart()
+        _ = await harness.core.sync(trigger: .call)
+        _ = await harness.core.ready()
+        StateStore(store: harness.store).failedBundleIds = ["b0"]
+        harness.loader.served = nil
+        harness.restart(configuration: Fixture.configuration(builtAt: Fixture.builtAt.addingTimeInterval(86_400)))
+        await harness.core.handleAppStart()
+        let status = await harness.core.status()
+        XCTAssertNil(status.currentRelease)
+        XCTAssertNil(status.nextRelease)
+        XCTAssertNil(status.fallbackRelease)
+        XCTAssertEqual(status.failedBundleIds, [])
+        XCTAssertEqual(harness.loader.persisted, .some(nil))
+        XCTAssertEqual(harness.loader.loaded, ["b2"])
+        XCTAssertEqual(harness.files.bundleIds(), [])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: harness.loader.projectionDirectory(bundleId: "b2").path))
+    }
+
+    func testShouldKeepTheCurrentReleaseWhenTheBinaryIsTheSame() async {
+        let harness = Harness(configuration: Fixture.configuration(installStrategy: .immediate))
+        let v2 = Fixture.release(number: 1, bundleId: "b2", content: Data("<html>v2</html>".utf8))
+        harness.publish([v2], sequence: 1)
+        await harness.core.handleAppStart()
+        _ = await harness.core.sync(trigger: .call)
+        _ = await harness.core.ready()
+        harness.restart()
+        await harness.core.handleAppStart()
+        let status = await harness.core.status()
+        XCTAssertEqual(status.currentRelease, v2.release.release)
+        XCTAssertEqual(status.fallbackRelease, v2.release.release)
+        XCTAssertEqual(harness.files.bundleIds(), ["b2"])
+    }
+
     func testShouldRollBackAReleaseThatNeverRendersAndBlocklistIt() async {
         let harness = Harness(configuration: Fixture.configuration(installStrategy: .immediate))
         let v2 = Fixture.release(number: 1, bundleId: "b2", content: Data("<html>v2</html>".utf8))

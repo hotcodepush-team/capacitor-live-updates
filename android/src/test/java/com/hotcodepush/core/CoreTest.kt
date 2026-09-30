@@ -54,6 +54,45 @@ class CoreTest {
     }
 
     @Test
+    fun shouldStartOnTheEmbeddedBundleWhenTheBinaryChanged() = runBlocking {
+        val harness = Harness(Fixture.configuration(installStrategy = InstallStrategy.IMMEDIATE))
+        val v2 = Fixture.release(1, "b2", v2Content)
+        harness.publish(listOf(v2), 1)
+        harness.core.handleAppStart()
+        harness.core.sync(SyncTrigger.CALL)
+        harness.core.ready()
+        StateStore(harness.store).failedBundleIds = listOf("b0")
+        harness.loader.served = null
+        harness.restart(Fixture.configuration(builtAt = Fixture.BUILT_AT + 86_400_000))
+        harness.core.handleAppStart()
+        val status = harness.core.status()
+        assertNull(status.currentRelease)
+        assertNull(status.nextRelease)
+        assertNull(status.fallbackRelease)
+        assertTrue(status.failedBundleIds.isEmpty())
+        assertTrue(harness.loader.hasPersisted && harness.loader.persisted == null)
+        assertEquals(listOf("b2"), harness.loader.loaded)
+        assertTrue(harness.files.bundleIds().isEmpty())
+        assertTrue(!harness.loader.projectionDirectory("b2").exists())
+    }
+
+    @Test
+    fun shouldKeepTheCurrentReleaseWhenTheBinaryIsTheSame() = runBlocking {
+        val harness = Harness(Fixture.configuration(installStrategy = InstallStrategy.IMMEDIATE))
+        val v2 = Fixture.release(1, "b2", v2Content)
+        harness.publish(listOf(v2), 1)
+        harness.core.handleAppStart()
+        harness.core.sync(SyncTrigger.CALL)
+        harness.core.ready()
+        harness.restart()
+        harness.core.handleAppStart()
+        val status = harness.core.status()
+        assertEquals(v2.release.release, status.currentRelease)
+        assertEquals(v2.release.release, status.fallbackRelease)
+        assertEquals(listOf("b2"), harness.files.bundleIds())
+    }
+
+    @Test
     fun shouldRollBackAReleaseThatNeverRendersAndBlocklistIt() = runBlocking {
         val harness = Harness(Fixture.configuration(installStrategy = InstallStrategy.IMMEDIATE))
         val v2 = Fixture.release(1, "b2", v2Content)

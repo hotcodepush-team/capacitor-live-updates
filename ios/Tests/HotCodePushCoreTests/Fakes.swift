@@ -141,7 +141,7 @@ struct Fixture {
         return BundleManifest(bundleId: "embedded", appId: appId, version: "1.0.0", createdAt: builtAt, files: [.init(path: "index.html", sha256: Hashing.sha256Hex(embeddedIndexHtml), sizeBytes: embeddedIndexHtml.count)])
     }
 
-    static func configuration(installStrategy: InstallStrategy = .nextStart, autoSync: Bool = false, readySignal: ReadySignal = .render, publicKeys: [String] = [], fingerprint: String? = "fp1:abc") -> Configuration {
+    static func configuration(installStrategy: InstallStrategy = .nextStart, autoSync: Bool = false, readySignal: ReadySignal = .render, publicKeys: [String] = [], fingerprint: String? = "fp1:abc", builtAt: Date = Fixture.builtAt) -> Configuration {
         let json: [String: Any] = [
             "appId": appId,
             "channelId": channelId,
