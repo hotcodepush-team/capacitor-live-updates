@@ -20,6 +20,7 @@ public actor Core {
     private var isRestartAllowed = true
     private var queuedRestart: (() -> Void)?
     private var isStartSyncPending = false
+    private var isSendingDeviceEvents = false
     private var backgroundedAt: Date?
     private var resolvedChannelName: (name: String, id: String)?
 
@@ -129,12 +130,13 @@ public actor Core {
             listener.synced(result: result, trigger: trigger)
             scheduleIntervalSync(after: configuration.syncInterval)
         }
+        Task { await self.sendDeviceEvents() }
         return result
     }
 
     private func resolveSync(installStrategy: InstallStrategy?, network: NetworkPolicy?, isCheckOnly: Bool) async -> SyncResult {
         let current = state.currentRelease
-        if device.isDebugBuild && !configuration.enabledInDebugBuilds {
+        if isDisabledInThisBuild {
             return .skipped(current, reason: .debugBuild)
         }
         guard let channelId = await resolveChannelId() else {
@@ -519,6 +521,10 @@ public actor Core {
         }
     }
 
+    private var isDisabledInThisBuild: Bool {
+        return device.isDebugBuild && !configuration.enabledInDebugBuilds
+    }
+
     private func deviceInfo() -> DeviceInfo {
         return DeviceInfo(appliedIndexSequence: nil, attributes: state.attributes, binaryBuild: device.binaryBuild, binaryVersion: device.binaryVersion, builtAt: configuration.builtAt, currentRelease: state.currentRelease, deviceId: state.deviceId, failedBundleIds: state.failedBundleIds, fingerprint: configuration.fingerprint, osVersion: device.osVersion, reportedAt: state.reportedAt, runtimeVersion: nil)
     }
@@ -538,5 +544,39 @@ public actor Core {
 
     private func enqueueDeviceEvent(_ event: DeviceEvent) {
         state.unsentEvents = Array((state.unsentEvents + [event]).suffix(200))
+    }
+
+    /// One batch to the events endpoint, the outbox and the report when it changed: the 202 clears what was sent, anything else keeps it for the next sync.
+    private func sendDeviceEvents() async {
+        guard !isSendingDeviceEvents, !isDisabledInThisBuild else { return }
+        let events = state.unsentEvents
+        let report = buildDeviceReport()
+        guard !events.isEmpty || report != nil,
+              let url = URL(string: "\(configuration.updatesBaseUrl)/v1/apps/\(configuration.appId)/events"),
+              let body = try? Json.encoder.encode(DeviceEventsRequest(deviceId: state.deviceId, events: events, platform: device.platform, report: report, sdkVersion: device.sdkVersion)) else { return }
+        isSendingDeviceEvents = true
+        defer { isSendingDeviceEvents = false }
+        guard let response = try? await http.post(url, headers: ["Content-Type": "application/json"], body: body), response.status == 202,
+              let acknowledged = try? Json.decoder.decode(DeviceEventsResponse.self, from: response.body) else { return }
+        state.unsentEvents = Array(state.unsentEvents.dropFirst(events.count))
+        state.reportedAt = acknowledged.reportedAt
+        if let report = report {
+            state.acknowledgedReport = report
+        }
+    }
+
+    /// The facts the server should hold: the report when they differ from the acknowledged ones or the month began, else nothing.
+    private func buildDeviceReport() -> DeviceReport? {
+        let channel = channel()
+        guard !channel.id.isEmpty else { return nil }
+        let report = DeviceReport(attributes: state.attributes, binaryBuild: device.binaryBuild, binaryVersion: device.binaryVersion, channelId: channel.id, channelSource: channel.source, embeddedBundleId: configuration.embeddedBundleId, fingerprint: configuration.fingerprint, osVersion: device.osVersion, releaseId: state.currentRelease?.id)
+        if report == state.acknowledgedReport, let reportedAt = state.reportedAt, resolveMonth(of: reportedAt) == resolveMonth(of: clock.now) {
+            return nil
+        }
+        return report
+    }
+
+    private func resolveMonth(of date: Date) -> String {
+        return String(Iso8601.format(date).prefix(7))
     }
 }

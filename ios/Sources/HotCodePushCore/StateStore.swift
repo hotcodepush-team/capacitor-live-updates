@@ -117,6 +117,11 @@ public final class StateStore {
         set { set("reportedAt", newValue.map(Iso8601.format)) }
     }
 
+    public var acknowledgedReport: DeviceReport? {
+        get { return read("acknowledgedReport") }
+        set { write("acknowledgedReport", newValue) }
+    }
+
     public var lastCheck: LastCheck? {
         get { return read("lastCheck") }
         set { write("lastCheck", newValue) }

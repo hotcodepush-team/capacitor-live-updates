@@ -54,3 +54,61 @@ public struct DeviceEvent: Codable, Equatable {
 public enum PackKind: String, Codable {
     case full, delta, streamed, files
 }
+
+/// The facts the device reports, sent when they differ from the acknowledged ones or the month began.
+public struct DeviceReport: Codable, Equatable {
+    public let attributes: [String: String]
+    public let binaryBuild: String
+    public let binaryVersion: String
+    public let channelId: String
+    public let channelSource: ChannelSource
+    public let embeddedBundleId: String?
+    public let fingerprint: String?
+    public let osVersion: String
+    public let releaseId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case attributes, binaryBuild, binaryVersion, channelId, channelSource, embeddedBundleId, fingerprint, osVersion, releaseId
+    }
+
+    /// Every key on the wire, `null` for the empty ones, as the endpoint's schema asks.
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(attributes, forKey: .attributes)
+        try container.encode(binaryBuild, forKey: .binaryBuild)
+        try container.encode(binaryVersion, forKey: .binaryVersion)
+        try container.encode(channelId, forKey: .channelId)
+        try container.encode(channelSource, forKey: .channelSource)
+        try container.encode(embeddedBundleId, forKey: .embeddedBundleId)
+        try container.encode(fingerprint, forKey: .fingerprint)
+        try container.encode(osVersion, forKey: .osVersion)
+        try container.encode(releaseId, forKey: .releaseId)
+    }
+}
+
+/// One batch to `POST /v1/apps/{appId}/events`: the outbox and, when it changed, the report.
+public struct DeviceEventsRequest: Encodable {
+    public let deviceId: String
+    public let events: [DeviceEvent]
+    public let platform: String
+    public let report: DeviceReport?
+    public let sdkVersion: String
+
+    enum CodingKeys: String, CodingKey {
+        case deviceId, events, platform, report, sdkVersion
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(deviceId, forKey: .deviceId)
+        try container.encode(events, forKey: .events)
+        try container.encode(platform, forKey: .platform)
+        try container.encode(report, forKey: .report)
+        try container.encode(sdkVersion, forKey: .sdkVersion)
+    }
+}
+
+/// The `202`: the server time the device stores as `reportedAt`.
+public struct DeviceEventsResponse: Decodable {
+    public let reportedAt: Date
+}

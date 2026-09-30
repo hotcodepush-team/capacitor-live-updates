@@ -1,6 +1,7 @@
 package com.hotcodepush.core
 
 import kotlinx.coroutines.runBlocking
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -401,6 +402,84 @@ class CoreTest {
         assertEquals(1, events.size)
         assertEquals(SkippedReason.INCOMPATIBLE.name, events[0].reason)
         assertEquals(ConditionType.OS, events[0].condition)
+    }
+
+    @Test
+    fun shouldSendTheOutboxAndTheReportAfterASyncAndClearThemOnA202() = runBlocking {
+        val harness = Harness()
+        harness.acknowledgeEvents()
+        val v2 = Fixture.release(1, "b2", v2Content)
+        harness.publish(listOf(v2), 1)
+        harness.core.handleAppStart()
+        harness.core.sync(SyncTrigger.CALL)
+        assertEquals(1, harness.http.posts.size)
+        assertEquals(Fixture.eventsUrl(), harness.http.posts[0].first)
+        assertEquals("application/json", harness.http.posts[0].second["Content-Type"])
+        val body = JSONObject(String(harness.http.posts[0].third))
+        val state = StateStore(harness.store)
+        assertEquals(state.deviceId, body.getString("deviceId"))
+        assertEquals("android", body.getString("platform"))
+        assertEquals("0.0.0", body.getString("sdkVersion"))
+        assertEquals(listOf("checked", "downloaded"), body.getJSONArray("events").map { it.getString("type") })
+        val report = body.getJSONObject("report")
+        assertEquals(Fixture.CHANNEL_ID, report.getString("channelId"))
+        assertEquals("config", report.getString("channelSource"))
+        assertEquals("2.4.1", report.getString("binaryVersion"))
+        assertEquals("fp1:abc", report.getString("fingerprint"))
+        assertEquals("embedded", report.getString("embeddedBundleId"))
+        assertTrue(report.isNull("releaseId"))
+        assertTrue(state.unsentEvents.isEmpty())
+        assertEquals(Iso8601.parse("2023-11-14T23:00:00.000Z"), state.reportedAt)
+        assertEquals(Fixture.CHANNEL_ID, state.acknowledgedReport?.channelId)
+        assertEquals(state.reportedAt, harness.core.status().lastReportAt)
+    }
+
+    @Test
+    fun shouldKeepTheOutboxWhenTheEventsEndpointFailsAndRetryAtTheNextSync() = runBlocking {
+        val harness = Harness()
+        harness.http.stub(Fixture.eventsUrl(), status = 500, body = ByteArray(0))
+        val v2 = Fixture.release(1, "b2", v2Content)
+        harness.publish(listOf(v2), 1)
+        harness.core.handleAppStart()
+        harness.core.sync(SyncTrigger.CALL)
+        assertEquals(1, harness.http.posts.size)
+        assertEquals(2, StateStore(harness.store).unsentEvents.size)
+        assertNull(StateStore(harness.store).reportedAt)
+        harness.acknowledgeEvents()
+        harness.core.sync(SyncTrigger.CALL)
+        assertEquals(2, harness.http.posts.size)
+        assertTrue(StateStore(harness.store).unsentEvents.isEmpty())
+    }
+
+    @Test
+    fun shouldSendTheReportOncePerChangeAndAgainWhenTheMonthBegan() = runBlocking {
+        val harness = Harness()
+        harness.acknowledgeEvents()
+        harness.publish(emptyList(), 1)
+        harness.core.handleAppStart()
+        harness.core.sync(SyncTrigger.CALL)
+        harness.core.sync(SyncTrigger.CALL)
+        assertEquals(1, harness.http.posts.size)
+        harness.core.setAttributes(mapOf("plan" to "beta"))
+        harness.core.sync(SyncTrigger.CALL)
+        assertEquals(2, harness.http.posts.size)
+        val changed = JSONObject(String(harness.http.posts[1].third))
+        assertEquals(mapOf("plan" to "beta"), changed.getJSONObject("report").getJSONObject("attributes").toStringMap())
+        assertEquals(0, changed.getJSONArray("events").length())
+        harness.clock.now += 40L * 86_400_000
+        harness.core.sync(SyncTrigger.CALL)
+        assertEquals(3, harness.http.posts.size)
+        assertTrue(!JSONObject(String(harness.http.posts[2].third)).isNull("report"))
+    }
+
+    @Test
+    fun shouldSendNothingWhenLiveUpdatesAreOffInADebugBuild() = runBlocking {
+        val harness = Harness(Fixture.configuration(enabledInDebugBuilds = false), isDebugBuild = true)
+        harness.acknowledgeEvents()
+        harness.publish(emptyList(), 1)
+        harness.core.handleAppStart()
+        assertEquals(SyncResult.skipped(null, SkippedReason.DEBUG_BUILD), harness.core.sync(SyncTrigger.CALL))
+        assertTrue(harness.http.posts.isEmpty())
     }
 
     @Test

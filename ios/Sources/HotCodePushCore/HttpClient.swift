@@ -16,9 +16,10 @@ public struct HttpResponse {
     }
 }
 
-/// The two HTTP shapes the core needs: a small GET and a large download that resumes.
+/// The three HTTP shapes the core needs: a small GET, a small POST and a large download that resumes.
 public protocol HttpClient {
     func get(_ url: URL, headers: [String: String]) async throws -> HttpResponse
+    func post(_ url: URL, headers: [String: String], body: Data) async throws -> HttpResponse
     /// Downloads to the file, appending from its current size with a `Range` request when it exists.
     func download(_ url: URL, to file: URL, progress: @escaping (Int, Int) -> Void) async throws
 }
@@ -31,13 +32,27 @@ public final class UrlSessionHttpClient: HttpClient {
     }
 
     public func get(_ url: URL, headers: [String: String]) async throws -> HttpResponse {
+        return try await send(UrlSessionHttpClient.request(url, method: "GET", headers: headers, body: nil))
+    }
+
+    public func post(_ url: URL, headers: [String: String], body: Data) async throws -> HttpResponse {
+        return try await send(UrlSessionHttpClient.request(url, method: "POST", headers: headers, body: body))
+    }
+
+    private func send(_ request: URLRequest) async throws -> HttpResponse {
+        let (data, response) = try await session.data(for: request)
+        return HttpResponse(status: (response as? HTTPURLResponse)?.statusCode ?? 0, headers: UrlSessionHttpClient.headers(of: response), body: data)
+    }
+
+    private static func request(_ url: URL, method: String, headers: [String: String], body: Data?) -> URLRequest {
         var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.httpBody = body
         request.timeoutInterval = 30
         for (name, value) in headers {
             request.setValue(value, forHTTPHeaderField: name)
         }
-        let (data, response) = try await session.data(for: request)
-        return HttpResponse(status: (response as? HTTPURLResponse)?.statusCode ?? 0, headers: UrlSessionHttpClient.headers(of: response), body: data)
+        return request
     }
 
     public func download(_ url: URL, to file: URL, progress: @escaping (Int, Int) -> Void) async throws {

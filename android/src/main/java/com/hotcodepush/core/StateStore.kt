@@ -47,7 +47,7 @@ class StateStore(private val store: KeyValueStore) {
         get() = getRaw("deviceId") ?: UUID.randomUUID().toString().lowercase().also { putRaw("deviceId", it) }
 
     var attributes: Map<String, String>
-        get() = readObject("attributes")?.let { json -> json.keys().asSequence().associateWith { json.getString(it) } } ?: emptyMap()
+        get() = readObject("attributes")?.toStringMap() ?: emptyMap()
         set(value) = writeObject("attributes", JSONObject(value))
 
     var channel: ChannelChoice?
@@ -78,6 +78,10 @@ class StateStore(private val store: KeyValueStore) {
     var reportedAt: Long?
         get() = Iso8601.parseOrNull(getRaw("reportedAt"))
         set(value) = putRaw("reportedAt", value?.let(Iso8601::format))
+
+    var acknowledgedReport: DeviceReport?
+        get() = readObject("acknowledgedReport")?.let(DeviceReport::fromJson)
+        set(value) = writeObject("acknowledgedReport", value?.toJson())
 
     var lastCheck: LastCheck?
         get() = readObject("lastCheck")?.let(LastCheck::fromJson)

@@ -12,6 +12,7 @@ class FakeHttpClient : HttpClient {
 
     val stubs = mutableMapOf<String, Stub>()
     val requests = mutableListOf<Pair<String, Map<String, String>>>()
+    val posts = mutableListOf<Triple<String, Map<String, String>, ByteArray>>()
     var isOffline = false
 
     fun stub(url: String, status: Int = 200, headers: Map<String, String> = emptyMap(), body: ByteArray) {
@@ -22,6 +23,13 @@ class FakeHttpClient : HttpClient {
 
     override suspend fun get(url: String, headers: Map<String, String>): HttpResponse {
         requests += url to headers
+        if (isOffline) throw java.io.IOException("offline")
+        val stub = stubs[url] ?: return HttpResponse(404, emptyMap(), ByteArray(0))
+        return HttpResponse(stub.status, stub.headers, stub.body)
+    }
+
+    override suspend fun post(url: String, headers: Map<String, String>, body: ByteArray): HttpResponse {
+        posts += Triple(url, headers, body)
         if (isOffline) throw java.io.IOException("offline")
         val stub = stubs[url] ?: return HttpResponse(404, emptyMap(), ByteArray(0))
         return HttpResponse(stub.status, stub.headers, stub.body)
@@ -113,6 +121,7 @@ object Fixture {
     const val APP_ID = "a0000000-0000-4000-8000-000000000001"
     const val CHANNEL_ID = "c0000000-0000-4000-8000-000000000001"
     const val FILES_BASE_URL = "https://files.test"
+    const val UPDATES_BASE_URL = "https://updates.test"
     const val BUILT_AT = 1_700_000_000_000L
     val embeddedIndexHtml = "<html>v1</html>".toByteArray()
 
@@ -120,7 +129,7 @@ object Fixture {
 
     fun embeddedManifest() = BundleManifest("embedded", APP_ID, "1.0.0", BUILT_AT, listOf(BundleManifest.File("index.html", Hashing.sha256Hex(embeddedIndexHtml), embeddedIndexHtml.size.toLong())), null, emptyList())
 
-    fun configuration(installStrategy: InstallStrategy = InstallStrategy.NEXT_START, autoSync: Boolean = false, readySignal: ReadySignal = ReadySignal.RENDER, publicKeys: List<String> = emptyList(), fingerprint: String? = "fp1:abc", builtAt: Long = BUILT_AT): Configuration {
+    fun configuration(installStrategy: InstallStrategy = InstallStrategy.NEXT_START, autoSync: Boolean = false, readySignal: ReadySignal = ReadySignal.RENDER, publicKeys: List<String> = emptyList(), fingerprint: String? = "fp1:abc", builtAt: Long = BUILT_AT, enabledInDebugBuilds: Boolean = true): Configuration {
         val json = JSONObject()
             .put("appId", APP_ID)
             .put("channelId", CHANNEL_ID)
@@ -129,16 +138,20 @@ object Fixture {
             .put("installStrategy", installStrategy.wire)
             .put("readySignal", readySignal.wire)
             .put("readyTimeout", 10)
+            .put("enabledInDebugBuilds", enabledInDebugBuilds)
             .put("publicKeys", org.json.JSONArray(publicKeys))
             .put("builtAt", Iso8601.format(builtAt))
             .put("fingerprint", fingerprint ?: JSONObject.NULL)
             .put("embeddedBundleManifest", embeddedManifest().toJson())
             .put("embeddedBundleId", "embedded")
             .put("filesBaseUrl", FILES_BASE_URL)
+            .put("updatesBaseUrl", UPDATES_BASE_URL)
         return Configuration.decode(json.toString())
     }
 
     fun indexUrl() = "$FILES_BASE_URL/apps/$APP_ID/channels/$CHANNEL_ID/android/v1/index.json"
+
+    fun eventsUrl() = "$UPDATES_BASE_URL/v1/apps/$APP_ID/events"
 
     fun release(number: Int, bundleId: String, content: ByteArray, createdAt: Long = BUILT_AT + 60_000, rollout: Int = 100, conditions: List<Condition> = emptyList(), isMandatory: Boolean = false): Published {
         val sha256 = Hashing.sha256Hex(content)
@@ -156,7 +169,7 @@ object Fixture {
 }
 
 /** A core over fakes, in a fresh temporary directory. */
-class Harness(configuration: Configuration = Fixture.configuration()) {
+class Harness(configuration: Configuration = Fixture.configuration(), isDebugBuild: Boolean = false) {
     val root: File = Files.createTempDirectory("hotcodepush-tests").toFile()
     val store = InMemoryStore()
     val http = FakeHttpClient()
@@ -167,13 +180,19 @@ class Harness(configuration: Configuration = Fixture.configuration()) {
     val clock = FixedClock(Fixture.BUILT_AT + 3_600_000)
     val files = FileStore(File(root, "store"))
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+    private val device = DeviceFacts("android", "2.4.1", "57", "14", "0.0.0", isDebugBuild)
     var core: Core = build(configuration)
 
-    private fun build(configuration: Configuration) = Core(configuration, DeviceFacts("android", "2.4.1", "57", "14", "0.0.0", false), store, files, embedded, http, loader, listener, scheduler, clock, scope, File(root, "tmp"))
+    private fun build(configuration: Configuration) = Core(configuration, device, store, files, embedded, http, loader, listener, scheduler, clock, scope, File(root, "tmp"))
 
     /** A second core over the same store and files: the next start of the app. */
     fun restart(configuration: Configuration = Fixture.configuration()) {
         core = build(configuration)
+    }
+
+    /** The events endpoint answering every batch with the same server time. */
+    fun acknowledgeEvents(reportedAt: String = "2023-11-14T23:00:00.000Z") {
+        http.stubJson(Fixture.eventsUrl(), JSONObject().put("reportedAt", reportedAt), status = 202)
     }
 
     fun publish(releases: List<Fixture.Published>, sequence: Int, revoked: List<String> = emptyList(), isPaused: Boolean = false, cappedAt: Long? = null, rollBackToEmbedded: RollBackToEmbedded? = null, etag: String = "\"e1\"") {

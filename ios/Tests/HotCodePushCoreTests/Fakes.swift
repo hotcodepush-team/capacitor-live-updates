@@ -10,6 +10,7 @@ final class FakeHttpClient: HttpClient {
 
     var stubs: [String: Stub] = [:]
     var requests: [(url: URL, headers: [String: String])] = []
+    var posts: [(url: URL, headers: [String: String], body: Data)] = []
     var isOffline = false
 
     func stub(_ url: String, status: Int = 200, headers: [String: String] = [:], body: Data) {
@@ -22,6 +23,13 @@ final class FakeHttpClient: HttpClient {
 
     func get(_ url: URL, headers: [String: String]) async throws -> HttpResponse {
         requests.append((url, headers))
+        if isOffline { throw URLError(.notConnectedToInternet) }
+        guard let stub = stubs[url.absoluteString] else { return HttpResponse(status: 404, headers: [:], body: Data()) }
+        return HttpResponse(status: stub.status, headers: stub.headers, body: stub.body)
+    }
+
+    func post(_ url: URL, headers: [String: String], body: Data) async throws -> HttpResponse {
+        posts.append((url, headers, body))
         if isOffline { throw URLError(.notConnectedToInternet) }
         guard let stub = stubs[url.absoluteString] else { return HttpResponse(status: 404, headers: [:], body: Data()) }
         return HttpResponse(status: stub.status, headers: stub.headers, body: stub.body)
@@ -138,6 +146,7 @@ struct Fixture {
     static let appId = "a0000000-0000-4000-8000-000000000001"
     static let channelId = "c0000000-0000-4000-8000-000000000001"
     static let filesBaseUrl = "https://files.test"
+    static let updatesBaseUrl = "https://updates.test"
     static let builtAt = Date(timeIntervalSince1970: 1_700_000_000)
     static let embeddedIndexHtml = Data("<html>v1</html>".utf8)
 
@@ -145,7 +154,7 @@ struct Fixture {
         return BundleManifest(bundleId: "embedded", appId: appId, version: "1.0.0", createdAt: builtAt, files: [.init(path: "index.html", sha256: Hashing.sha256Hex(embeddedIndexHtml), sizeBytes: embeddedIndexHtml.count)])
     }
 
-    static func configuration(installStrategy: InstallStrategy = .nextStart, autoSync: Bool = false, readySignal: ReadySignal = .render, publicKeys: [String] = [], fingerprint: String? = "fp1:abc", builtAt: Date = Fixture.builtAt) -> Configuration {
+    static func configuration(installStrategy: InstallStrategy = .nextStart, autoSync: Bool = false, readySignal: ReadySignal = .render, publicKeys: [String] = [], fingerprint: String? = "fp1:abc", builtAt: Date = Fixture.builtAt, enabledInDebugBuilds: Bool = true) -> Configuration {
         let json: [String: Any] = [
             "appId": appId,
             "channelId": channelId,
@@ -154,18 +163,24 @@ struct Fixture {
             "installStrategy": installStrategy.rawValue,
             "readySignal": readySignal.rawValue,
             "readyTimeout": 10,
+            "enabledInDebugBuilds": enabledInDebugBuilds,
             "publicKeys": publicKeys,
             "builtAt": Iso8601.format(builtAt),
             "fingerprint": fingerprint as Any,
             "embeddedBundleManifest": try! JSONSerialization.jsonObject(with: try! Json.encoder.encode(embeddedManifest())),
             "embeddedBundleId": "embedded",
-            "filesBaseUrl": filesBaseUrl
+            "filesBaseUrl": filesBaseUrl,
+            "updatesBaseUrl": updatesBaseUrl
         ]
         return try! Configuration.decode(try! JSONSerialization.data(withJSONObject: json))
     }
 
     static func indexUrl() -> String {
         return "\(filesBaseUrl)/apps/\(appId)/channels/\(channelId)/ios/v1/index.json"
+    }
+
+    static func eventsUrl() -> String {
+        return "\(updatesBaseUrl)/v1/apps/\(appId)/events"
     }
 
     static func release(number: Int, bundleId: String, content: Data, createdAt: Date = builtAt.addingTimeInterval(60), rollout: Int = 100, conditions: [Condition] = [], isMandatory: Bool = false) -> (release: IndexRelease, manifest: BundleManifest, envelope: ManifestEnvelope, pack: Data) {
@@ -197,19 +212,26 @@ final class Harness {
     let embedded = InMemoryEmbeddedBundle()
     let clock = FixedClock(now: Fixture.builtAt.addingTimeInterval(3600))
     let files: FileStore
+    private let device: DeviceFacts
     var core: Core
 
-    init(configuration: Configuration = Fixture.configuration()) {
+    init(configuration: Configuration = Fixture.configuration(), isDebugBuild: Bool = false) {
         root = FileManager.default.temporaryDirectory.appendingPathComponent("hotcodepush-tests-\(UUID().uuidString)")
         loader = FakeLoader(root: root)
         files = FileStore(rootDirectory: root.appendingPathComponent("store"))
+        device = DeviceFacts(platform: "ios", binaryVersion: "2.4.1", binaryBuild: "57", osVersion: "17.4", sdkVersion: "0.0.0", isDebugBuild: isDebugBuild)
         embedded.files[Hashing.sha256Hex(Fixture.embeddedIndexHtml)] = Fixture.embeddedIndexHtml
-        core = Core(configuration: configuration, device: DeviceFacts(platform: "ios", binaryVersion: "2.4.1", binaryBuild: "57", osVersion: "17.4", sdkVersion: "0.0.0", isDebugBuild: false), store: store, files: files, embedded: embedded, http: http, loader: loader, listener: listener, scheduler: scheduler, clock: clock, temporaryDirectory: root.appendingPathComponent("tmp"))
+        core = Core(configuration: configuration, device: device, store: store, files: files, embedded: embedded, http: http, loader: loader, listener: listener, scheduler: scheduler, clock: clock, temporaryDirectory: root.appendingPathComponent("tmp"))
     }
 
     /// A second core over the same store and files: the next start of the app.
     func restart(configuration: Configuration = Fixture.configuration()) {
-        core = Core(configuration: configuration, device: DeviceFacts(platform: "ios", binaryVersion: "2.4.1", binaryBuild: "57", osVersion: "17.4", sdkVersion: "0.0.0", isDebugBuild: false), store: store, files: files, embedded: embedded, http: http, loader: loader, listener: listener, scheduler: scheduler, clock: clock, temporaryDirectory: root.appendingPathComponent("tmp"))
+        core = Core(configuration: configuration, device: device, store: store, files: files, embedded: embedded, http: http, loader: loader, listener: listener, scheduler: scheduler, clock: clock, temporaryDirectory: root.appendingPathComponent("tmp"))
+    }
+
+    /// The events endpoint answering every batch with the same server time.
+    func acknowledgeEvents(reportedAt: String = "2023-11-14T23:00:00.000Z") {
+        http.stubJson(Fixture.eventsUrl(), ["reportedAt": reportedAt], status: 202)
     }
 
     func publish(_ releases: [(release: IndexRelease, manifest: BundleManifest, envelope: ManifestEnvelope, pack: Data)], sequence: Int, revoked: [String] = [], isPaused: Bool = false, cappedAt: Date? = nil, rollBackToEmbedded: RollBackToEmbedded? = nil, etag: String = "\"e1\"") {

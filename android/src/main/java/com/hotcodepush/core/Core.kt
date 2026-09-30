@@ -34,6 +34,7 @@ class Core(
     private var isRestartAllowed = true
     private var queuedRestart: (() -> Unit)? = null
     private var isStartSyncPending = false
+    private var isSendingDeviceEvents = false
     private var backgroundedAt: Long? = null
     private var resolvedChannelName: Pair<String, String>? = null
 
@@ -122,12 +123,13 @@ class Core(
             }
         }
         if (!isCheckOnly) listener.synced(result, trigger)
+        scope.launch { sendDeviceEvents() }
         return result
     }
 
     private suspend fun resolveSync(installStrategy: InstallStrategy?, network: NetworkPolicy?, isCheckOnly: Boolean): SyncResult {
         val current = state.currentRelease
-        if (device.isDebugBuild && !configuration.enabledInDebugBuilds) return SyncResult.skipped(current, SkippedReason.DEBUG_BUILD)
+        if (isDisabledInThisBuild) return SyncResult.skipped(current, SkippedReason.DEBUG_BUILD)
         val channelId = resolveChannelId() ?: return SyncResult.failed(current, FailedReason.UNKNOWN_CHANNEL, "The channel set at runtime is not in the app's channels index")
         val index = when (val fetch = fetchChannelIndex(channelId)) {
             is IndexFetch.Index -> fetch.index
@@ -465,6 +467,9 @@ class Core(
         }
     }
 
+    private val isDisabledInThisBuild: Boolean
+        get() = device.isDebugBuild && !configuration.enabledInDebugBuilds
+
     private fun deviceInfo() = DeviceInfo(null, state.attributes, device.binaryBuild, device.binaryVersion, configuration.builtAt, state.currentRelease, state.deviceId, state.failedBundleIds, configuration.fingerprint, device.osVersion, state.reportedAt, null)
 
     // Events
@@ -482,4 +487,38 @@ class Core(
     private fun enqueueDeviceEvent(event: DeviceEvent) {
         state.unsentEvents = (state.unsentEvents + event).takeLast(200)
     }
+
+    /** One batch to the events endpoint, the outbox and the report when it changed: the 202 clears what was sent, anything else keeps it for the next sync. */
+    private suspend fun sendDeviceEvents() {
+        val request = lock.withLock {
+            if (isSendingDeviceEvents || isDisabledInThisBuild) return
+            val events = state.unsentEvents
+            val report = buildDeviceReport()
+            if (events.isEmpty() && report == null) return
+            isSendingDeviceEvents = true
+            DeviceEventsRequest(state.deviceId, events, device.platform, report, device.sdkVersion)
+        }
+        val url = "${configuration.updatesBaseUrl}/v1/apps/${configuration.appId}/events"
+        val response = runCatching { httpClient.post(url, mapOf("Content-Type" to "application/json"), request.toJson().toString().toByteArray()) }.getOrNull()
+        val acknowledged = response?.takeIf { it.status == 202 }?.let { runCatching { DeviceEventsResponse.fromJson(org.json.JSONObject(String(it.body, Charsets.UTF_8))) }.getOrNull() }
+        lock.withLock {
+            isSendingDeviceEvents = false
+            if (acknowledged == null) return
+            state.unsentEvents = state.unsentEvents.drop(request.events.size)
+            state.reportedAt = acknowledged.reportedAt
+            request.report?.let { state.acknowledgedReport = it }
+        }
+    }
+
+    /** The facts the server should hold: the report when they differ from the acknowledged ones or the month began, else nothing. */
+    private fun buildDeviceReport(): DeviceReport? {
+        val channel = channel()
+        if (channel.id.isEmpty()) return null
+        val report = DeviceReport(state.attributes, device.binaryBuild, device.binaryVersion, channel.id, channel.source, configuration.embeddedBundleId, configuration.fingerprint, device.osVersion, state.currentRelease?.id)
+        val reportedAt = state.reportedAt
+        val isAcknowledged = report == state.acknowledgedReport && reportedAt != null && resolveMonth(reportedAt) == resolveMonth(clock.now())
+        return if (isAcknowledged) null else report
+    }
+
+    private fun resolveMonth(epochMillis: Long) = Iso8601.format(epochMillis).substring(0, 7)
 }

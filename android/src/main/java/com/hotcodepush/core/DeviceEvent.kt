@@ -1,5 +1,6 @@
 package com.hotcodepush.core
 
+import org.json.JSONArray
 import org.json.JSONObject
 
 /** An outcome event or check event, queued in the outbox until the events endpoint acknowledges it. */
@@ -56,3 +57,60 @@ data class DeviceEvent(
         )
     }
 }
+
+/** The facts the device reports, sent when they differ from the acknowledged ones or the month began. */
+data class DeviceReport(
+    val attributes: Map<String, String>,
+    val binaryBuild: String,
+    val binaryVersion: String,
+    val channelId: String,
+    val channelSource: ChannelSource,
+    val embeddedBundleId: String?,
+    val fingerprint: String?,
+    val osVersion: String,
+    val releaseId: String?,
+) {
+    fun toJson(): JSONObject = JSONObject()
+        .put("attributes", JSONObject(attributes))
+        .put("binaryBuild", binaryBuild)
+        .put("binaryVersion", binaryVersion)
+        .put("channelId", channelId)
+        .put("channelSource", channelSource.wire)
+        .put("embeddedBundleId", embeddedBundleId ?: JSONObject.NULL)
+        .put("fingerprint", fingerprint ?: JSONObject.NULL)
+        .put("osVersion", osVersion)
+        .put("releaseId", releaseId ?: JSONObject.NULL)
+
+    companion object {
+        fun fromJson(json: JSONObject) = DeviceReport(
+            attributes = json.getJSONObject("attributes").toStringMap(),
+            binaryBuild = json.getString("binaryBuild"),
+            binaryVersion = json.getString("binaryVersion"),
+            channelId = json.getString("channelId"),
+            channelSource = ChannelSource.entries.first { it.wire == json.getString("channelSource") },
+            embeddedBundleId = json.optNullableString("embeddedBundleId"),
+            fingerprint = json.optNullableString("fingerprint"),
+            osVersion = json.getString("osVersion"),
+            releaseId = json.optNullableString("releaseId"),
+        )
+    }
+}
+
+/** One batch to `POST /v1/apps/{appId}/events`: the outbox and, when it changed, the report. */
+data class DeviceEventsRequest(val deviceId: String, val events: List<DeviceEvent>, val platform: String, val report: DeviceReport?, val sdkVersion: String) {
+    fun toJson(): JSONObject = JSONObject()
+        .put("deviceId", deviceId)
+        .put("events", JSONArray(events.map { it.toJson() }))
+        .put("platform", platform)
+        .put("report", report?.toJson() ?: JSONObject.NULL)
+        .put("sdkVersion", sdkVersion)
+}
+
+/** The `202`: the server time the device stores as `reportedAt`. */
+data class DeviceEventsResponse(val reportedAt: Long) {
+    companion object {
+        fun fromJson(json: JSONObject) = DeviceEventsResponse(Iso8601.parse(json.getString("reportedAt")))
+    }
+}
+
+internal fun JSONObject.toStringMap(): Map<String, String> = keys().asSequence().associateWith { getString(it) }
