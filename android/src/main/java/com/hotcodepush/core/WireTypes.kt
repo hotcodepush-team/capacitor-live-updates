@@ -1,6 +1,7 @@
 package com.hotcodepush.core
 
 import org.json.JSONArray
+import org.json.JSONException
 import org.json.JSONObject
 
 /** The channel's index for a platform: `/apps/{appId}/channels/{channelId}/{platform}/v1/index.json`. */
@@ -86,14 +87,14 @@ data class IndexRelease(
 
     companion object {
         fun fromJson(json: JSONObject) = IndexRelease(
-            id = json.getString("id"),
+            id = json.getString("id", WireRule.IDENTIFIER),
             number = json.getInt("number"),
             createdAt = Iso8601.parse(json.getString("createdAt")),
             isMandatory = json.optBoolean("isMandatory", false),
             notes = json.optNullableString("notes"),
             rollout = json.optInt("rollout", 100),
             conditions = json.optJSONArray("conditions").map { Condition.fromJson(it) },
-            bundleId = json.getString("bundleId"),
+            bundleId = json.getString("bundleId", WireRule.IDENTIFIER),
             bundleVersion = json.getString("bundleVersion"),
             manifestUrl = json.getString("manifestUrl"),
             manifestSha256 = json.getString("manifestSha256"),
@@ -213,16 +214,40 @@ data class BundleManifest(
 
     companion object {
         fun fromJson(json: JSONObject) = BundleManifest(
-            bundleId = json.getString("bundleId"),
+            bundleId = json.getString("bundleId", WireRule.IDENTIFIER),
             appId = json.getString("appId"),
             version = json.getString("version"),
             createdAt = Iso8601.parse(json.getString("createdAt")),
-            files = json.getJSONArray("files").map { File(it.getString("path"), it.getString("sha256"), it.optLong("sizeBytes", 0)) },
+            files = json.getJSONArray("files").map { File(it.getString("path", WireRule.RELATIVE_PATH), it.getString("sha256", WireRule.SHA256), it.optLong("sizeBytes", 0)) },
             pack = json.optJSONObject("pack")?.let { Pack(it.getString("url"), it.optLong("sizeBytes", 0)) },
             deltas = json.optJSONArray("deltas").map { Delta(it.getString("baseBundleId"), it.getString("url"), it.optLong("sizeBytes", 0)) },
         )
     }
 }
+
+/** What a value may hold before it names a file or a directory: nothing that climbs out of its directory. */
+internal enum class WireRule {
+    /** Letters, digits, `_` and `-`, at most 64: a bundle id names a directory. */
+    IDENTIFIER,
+
+    /** 64 lowercase hexadecimal characters: a file hash names a file. */
+    SHA256,
+
+    /** Relative and `/`-separated, with no empty, `.` or `..` segment, no backslash and no NUL. */
+    RELATIVE_PATH;
+
+    fun accepts(value: String): Boolean = when (this) {
+        IDENTIFIER -> identifierPattern.matches(value)
+        SHA256 -> sha256Pattern.matches(value)
+        RELATIVE_PATH -> '\\' !in value && '\u0000' !in value && value.split('/').none { it.isEmpty() || it == "." || it == ".." }
+    }
+}
+
+private val identifierPattern = Regex("[A-Za-z0-9_-]{1,64}")
+private val sha256Pattern = Regex("[0-9a-f]{64}")
+
+/** A string the rule accepts; anything else fails the decode before it can name a file or a directory. */
+internal fun JSONObject.getString(key: String, rule: WireRule): String = getString(key).also { if (!rule.accepts(it)) throw JSONException("Not a valid $key: $it") }
 
 internal fun JSONObject.optNullableString(key: String): String? = if (isNull(key)) null else optString(key)
 

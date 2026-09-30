@@ -68,6 +68,22 @@ public struct IndexRelease: Codable, Equatable {
         self.sizeBytes = sizeBytes
     }
 
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(.identifier, forKey: .id)
+        number = try container.decode(Int.self, forKey: .number)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        isMandatory = try container.decode(Bool.self, forKey: .isMandatory)
+        notes = try container.decodeIfPresent(String.self, forKey: .notes)
+        rollout = try container.decode(Int.self, forKey: .rollout)
+        conditions = try container.decode([Condition].self, forKey: .conditions)
+        bundleId = try container.decode(.identifier, forKey: .bundleId)
+        bundleVersion = try container.decode(String.self, forKey: .bundleVersion)
+        manifestUrl = try container.decode(String.self, forKey: .manifestUrl)
+        manifestSha256 = try container.decode(String.self, forKey: .manifestSha256)
+        sizeBytes = try container.decode(Int.self, forKey: .sizeBytes)
+    }
+
     public var release: Release {
         return Release(id: id, number: number, bundleId: bundleId, bundleVersion: bundleVersion, isMandatory: isMandatory)
     }
@@ -202,6 +218,13 @@ public struct BundleManifest: Codable, Equatable {
             self.sha256 = sha256
             self.sizeBytes = sizeBytes
         }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            path = try container.decode(.relativePath, forKey: .path)
+            sha256 = try container.decode(.sha256, forKey: .sha256)
+            sizeBytes = try container.decode(Int.self, forKey: .sizeBytes)
+        }
     }
 
     public struct Pack: Codable, Equatable {
@@ -250,7 +273,7 @@ public struct BundleManifest: Codable, Equatable {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        bundleId = try container.decode(String.self, forKey: .bundleId)
+        bundleId = try container.decode(.identifier, forKey: .bundleId)
         appId = try container.decode(String.self, forKey: .appId)
         version = try container.decode(String.self, forKey: .version)
         createdAt = try container.decode(Date.self, forKey: .createdAt)
@@ -261,5 +284,40 @@ public struct BundleManifest: Codable, Equatable {
 
     public func sha256(forPath path: String) -> String? {
         return files.first { $0.path == path }?.sha256
+    }
+}
+
+/// What a value may hold before it names a file or a directory: nothing that climbs out of its directory.
+enum WireRule {
+    /// Letters, digits, `_` and `-`, at most 64: a bundle id names a directory.
+    case identifier
+    /// 64 lowercase hexadecimal characters: a file hash names a file.
+    case sha256
+    /// Relative and `/`-separated, with no empty, `.` or `..` segment, no backslash and no NUL.
+    case relativePath
+
+    private static let identifierBytes = Set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-".utf8)
+    private static let sha256Bytes = Set("0123456789abcdef".utf8)
+
+    func accepts(_ value: String) -> Bool {
+        switch self {
+        case .identifier:
+            return (1...64).contains(value.utf8.count) && value.utf8.allSatisfy(WireRule.identifierBytes.contains)
+        case .sha256:
+            return value.utf8.count == 64 && value.utf8.allSatisfy(WireRule.sha256Bytes.contains)
+        case .relativePath:
+            return !value.contains("\\") && !value.contains("\0") && value.split(separator: "/", omittingEmptySubsequences: false).allSatisfy { !$0.isEmpty && $0 != "." && $0 != ".." }
+        }
+    }
+}
+
+extension KeyedDecodingContainer {
+    /// A string the rule accepts; anything else fails the decode before it can name a file or a directory.
+    func decode(_ rule: WireRule, forKey key: Key) throws -> String {
+        let value = try decode(String.self, forKey: key)
+        guard rule.accepts(value) else {
+            throw DecodingError.dataCorruptedError(forKey: key, in: self, debugDescription: "Not a valid \(key.stringValue): \(value)")
+        }
+        return value
     }
 }

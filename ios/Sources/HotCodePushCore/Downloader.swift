@@ -59,7 +59,7 @@ public final class Downloader {
     }
 
     func fetchBundleManifest(_ target: IndexRelease) async throws -> BundleManifest {
-        guard let url = URL(string: target.manifestUrl) else { throw DownloadFailure.downloadFailed("Invalid manifest URL") }
+        let url = try resolvePinnedUrl(target.manifestUrl)
         let response: HttpResponse
         do {
             response = try await http.get(url, headers: [:])
@@ -100,7 +100,7 @@ public final class Downloader {
     }
 
     func downloadPack(_ urlString: String, bundleId: String, wanted: Set<String>, progress: @escaping (Int, Int) -> Void) async throws -> Int {
-        guard let url = URL(string: urlString) else { throw DownloadFailure.downloadFailed("Invalid pack URL") }
+        let url = try resolvePinnedUrl(urlString)
         let file = temporaryDirectory.appendingPathComponent("\(bundleId)-\(Hashing.sha256Hex(urlString).prefix(16)).pack")
         do {
             try await http.download(url, to: file, progress: progress)
@@ -122,6 +122,15 @@ public final class Downloader {
             throw DownloadFailure.verificationFailed("The pack did not verify: \(error)")
         }
         return data.count
+    }
+
+    /// The URL of a manifest, pack or delta only when it is on a configured host: the SDK fetches from our hosts and nowhere else.
+    func resolvePinnedUrl(_ string: String) throws -> URL {
+        let isOnConfiguredHost = [configuration.filesBaseUrl, configuration.updatesBaseUrl].contains { string.hasPrefix("\($0)/") }
+        guard isOnConfiguredHost, let url = URL(string: string) else {
+            throw DownloadFailure.verificationFailed("\(string) is not on a configured host")
+        }
+        return url
     }
 
     func downloadFile(_ file: BundleManifest.File) async throws -> Int {

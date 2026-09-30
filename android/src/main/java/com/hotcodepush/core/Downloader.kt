@@ -42,8 +42,9 @@ class Downloader(
     }
 
     internal suspend fun fetchBundleManifest(target: IndexRelease): BundleManifest {
+        val url = resolvePinnedUrl(target.manifestUrl)
         val response = try {
-            http.get(target.manifestUrl, emptyMap())
+            http.get(url, emptyMap())
         } catch (exception: Exception) {
             throw DownloadFailure.DownloadFailed("The manifest could not be fetched: ${exception.message}")
         }
@@ -74,9 +75,10 @@ class Downloader(
     }
 
     internal suspend fun downloadPack(url: String, bundleId: String, wanted: Set<String>, progress: (Long, Long) -> Unit): Long {
+        val pinnedUrl = resolvePinnedUrl(url)
         val file = File(temporaryDirectory, "$bundleId-${Hashing.sha256Hex(url).take(16)}.pack")
         try {
-            http.download(url, file, progress)
+            http.download(pinnedUrl, file, progress)
         } catch (failure: DownloadFailure) {
             throw failure
         } catch (exception: Exception) {
@@ -94,6 +96,13 @@ class Downloader(
         } finally {
             file.delete()
         }
+    }
+
+    /** The URL of a manifest, pack or delta only when it is on a configured host: the SDK fetches from our hosts and nowhere else. */
+    internal fun resolvePinnedUrl(url: String): String {
+        val isOnConfiguredHost = listOf(configuration.filesBaseUrl, configuration.updatesBaseUrl).any { url.startsWith("$it/") }
+        if (!isOnConfiguredHost) throw DownloadFailure.VerificationFailed("$url is not on a configured host")
+        return url
     }
 
     internal suspend fun downloadFile(file: BundleManifest.File): Long {
