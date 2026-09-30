@@ -20,7 +20,8 @@ public struct HttpResponse {
 public protocol HttpClient {
     func get(_ url: URL, headers: [String: String]) async throws -> HttpResponse
     func post(_ url: URL, headers: [String: String], body: Data) async throws -> HttpResponse
-    /// Downloads to the file, appending from its current size with a `Range` request when it exists; past `maximumBytes` it stops and deletes the file.
+    /// Downloads to the file, appending from its current size with a `Range` request when it exists; what arrived stays when the
+    /// connection drops, for the next attempt to resume. Past `maximumBytes`, or on a status other than 200 or 206, it stops and deletes the file.
     func download(_ url: URL, to file: URL, maximumBytes: Int, progress: @escaping (Int, Int) -> Void) async throws
 }
 
@@ -57,7 +58,7 @@ public final class UrlSessionHttpClient: HttpClient {
         return request
     }
 
-    /// Streams the body into the file chunk by chunk, so a body larger than it may be never lands on disk whole.
+    /// Streams the body into the file chunk by chunk: a body larger than it may be never lands on disk whole, and a dropped connection leaves what arrived.
     public func download(_ url: URL, to file: URL, maximumBytes: Int, progress: @escaping (Int, Int) -> Void) async throws {
         var request = URLRequest(url: url)
         request.timeoutInterval = 60
@@ -67,7 +68,10 @@ public final class UrlSessionHttpClient: HttpClient {
         }
         let (bytes, response) = try await session.bytes(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard status == 200 || status == 206 else { throw DownloadFailure.downloadFailed("HTTP \(status) for \(url.lastPathComponent)") }
+        guard status == 200 || status == 206 else {
+            try? FileManager.default.removeItem(at: file)
+            throw DownloadFailure.downloadFailed("HTTP \(status) for \(url.lastPathComponent)")
+        }
         try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
         let isResumed = status == 206 && existing > 0
         if !isResumed {
@@ -89,13 +93,18 @@ public final class UrlSessionHttpClient: HttpClient {
             chunk.removeAll(keepingCapacity: true)
             progress(written, maximumBytes)
         }
-        for try await byte in bytes {
-            chunk.append(byte)
-            if chunk.count == UrlSessionHttpClient.chunkSize {
-                try writeChunk()
+        do {
+            for try await byte in bytes {
+                chunk.append(byte)
+                if chunk.count == UrlSessionHttpClient.chunkSize {
+                    try writeChunk()
+                }
             }
+            try writeChunk()
+        } catch let dropped as URLError {
+            try? writeChunk()
+            throw dropped
         }
-        try writeChunk()
     }
 
     private static func headers(of response: URLResponse) -> [String: String] {

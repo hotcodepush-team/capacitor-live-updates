@@ -4,6 +4,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
+import java.io.FileOutputStream
 import java.util.concurrent.TimeUnit
 
 data class HttpResponse(val status: Int, val headers: Map<String, String>, val body: ByteArray) {
@@ -16,7 +17,11 @@ interface HttpClient {
 
     suspend fun post(url: String, headers: Map<String, String>, body: ByteArray): HttpResponse
 
-    /** Downloads to the file, appending from its current size with a `Range` request when it exists; past `maximumBytes` it stops and deletes the file. */
+    /**
+     * Downloads to the file, appending from its current size with a `Range` request when it exists; what arrived stays
+     * when the connection drops, for the next attempt to resume. Past `maximumBytes`, or on a status other than 200 or 206,
+     * it stops and deletes the file.
+     */
     suspend fun download(url: String, file: File, maximumBytes: Long, progress: (Long, Long) -> Unit)
 }
 
@@ -36,12 +41,14 @@ class OkHttpClientAdapter(private val client: OkHttpClient = sharedClient) : Htt
         val existing = if (file.isFile) file.length() else 0L
         val request = Request.Builder().url(url).apply { if (existing > 0) header("Range", "bytes=$existing-") }.build()
         client.newCall(request).execute().use { response ->
-            if (response.code != 200 && response.code != 206) throw DownloadFailure.DownloadFailed("HTTP ${response.code} for ${url.substringAfterLast('/')}")
+            if (response.code != 200 && response.code != 206) {
+                file.delete()
+                throw DownloadFailure.DownloadFailed("HTTP ${response.code} for ${url.substringAfterLast('/')}")
+            }
             file.parentFile?.mkdirs()
             val append = response.code == 206 && existing > 0
             var written = if (append) existing else 0L
-            file.outputStream().use { output ->
-                if (append) file.appendBytes(ByteArray(0))
+            FileOutputStream(file, append).use { output ->
                 response.body.byteStream().use { input ->
                     val buffer = ByteArray(64 * 1024)
                     while (true) {

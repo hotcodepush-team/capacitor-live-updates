@@ -108,7 +108,7 @@ public final class Downloader {
         throw DownloadFailure.downloadFailed("The download needs \(requiredBytes) bytes and \(availableBytes) are free")
     }
 
-    /// Streams the pack to disk, never past its size in the manifest, then inflates each wanted entry up to its file's size.
+    /// Streams the pack to disk, resuming what an earlier attempt left and never past its size in the manifest, then inflates each wanted entry up to its file's size.
     func downloadPack(_ source: BundleManifest.Pack, bundleId: String, wanted: [String: Int], progress: @escaping (Int, Int) -> Void) async throws -> Int {
         let url = try resolvePinnedUrl(source.url)
         let file = temporaryDirectory.appendingPathComponent("\(bundleId)-\(Hashing.sha256Hex(source.url).prefix(16)).pack")
@@ -121,6 +121,7 @@ public final class Downloader {
         }
         defer { try? FileManager.default.removeItem(at: file) }
         guard let data = try? Data(contentsOf: file, options: .mappedIfSafe) else { throw DownloadFailure.downloadFailed("The pack could not be read") }
+        guard data.count == source.sizeBytes else { throw DownloadFailure.verificationFailed("The pack holds \(data.count) of its \(source.sizeBytes) bytes") }
         do {
             try PackReader.forEachEntry(in: data) { entry in
                 guard let sizeBytes = wanted[entry.sha256] else { return }

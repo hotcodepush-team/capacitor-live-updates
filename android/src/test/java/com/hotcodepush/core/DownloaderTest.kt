@@ -56,6 +56,15 @@ class DownloaderTest {
     }
 
     @Test
+    fun shouldRefuseAPackWhoseLengthDiffersFromTheManifest() {
+        val harness = DownloaderHarness()
+        val bundle = DownloaderHarness.bundle(mapOf("index.html" to indexHtml, "app.js" to appJs))
+        val manifest = bundle.manifest.copy(pack = BundleManifest.Pack(DownloaderHarness.PACK_URL, bundle.pack.size + 1L))
+        assertEquals(FailedReason.VERIFICATION_FAILED, harness.downloadFailure(harness.publish(manifest, bundle.pack))?.reason)
+        assertEquals(emptyList<String>(), File(harness.root, "tmp").list()?.toList())
+    }
+
+    @Test
     fun shouldRefuseASingleFileLargerThanItsSize() {
         val harness = DownloaderHarness()
         val sha256 = Hashing.sha256Hex(indexHtml)

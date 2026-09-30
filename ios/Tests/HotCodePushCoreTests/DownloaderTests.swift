@@ -47,6 +47,15 @@ final class DownloaderTests: XCTestCase {
         XCTAssertFalse(harness.files.hasFile(sha256: Hashing.sha256Hex(indexHtml)))
     }
 
+    func testShouldRefuseAPackWhoseLengthDiffersFromTheManifest() async throws {
+        let harness = DownloaderHarness()
+        let bundle = DownloaderHarness.bundle(["index.html": indexHtml, "app.js": appJs])
+        let manifest = BundleManifest(bundleId: DownloaderHarness.bundleId, appId: Fixture.appId, version: "1.2.0", createdAt: Fixture.builtAt, files: bundle.manifest.files, pack: .init(url: DownloaderHarness.packUrl, sizeBytes: bundle.pack.count + 1))
+        let failure = await harness.downloadFailure(harness.publish(manifest, pack: bundle.pack))
+        XCTAssertEqual(failure?.reason, .verificationFailed)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: harness.root.appendingPathComponent("tmp").path), [])
+    }
+
     func testShouldRefuseASingleFileLargerThanItsSize() async {
         let harness = DownloaderHarness()
         let manifest = BundleManifest(bundleId: DownloaderHarness.bundleId, appId: Fixture.appId, version: "1.2.0", createdAt: Fixture.builtAt, files: [.init(path: "index.html", sha256: Hashing.sha256Hex(indexHtml), sizeBytes: indexHtml.count - 1)])

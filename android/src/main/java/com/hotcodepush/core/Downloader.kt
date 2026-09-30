@@ -81,7 +81,7 @@ class Downloader(
         if (availableBytes < requiredBytes) throw DownloadFailure.DownloadFailed("The download needs $requiredBytes bytes and $availableBytes are free")
     }
 
-    /** Streams the pack to disk, never past its size in the manifest, then inflates each wanted entry up to its file's size. */
+    /** Streams the pack to disk, resuming what an earlier attempt left and never past its size in the manifest, then inflates each wanted entry up to its file's size. */
     internal suspend fun downloadPack(source: BundleManifest.Pack, bundleId: String, wanted: Map<String, Long>, progress: (Long, Long) -> Unit): Long {
         val pinnedUrl = resolvePinnedUrl(source.url)
         val file = File(temporaryDirectory, "$bundleId-${Hashing.sha256Hex(source.url).take(16)}.pack")
@@ -93,6 +93,7 @@ class Downloader(
             throw DownloadFailure.DownloadFailed("The pack could not be downloaded: ${exception.message}")
         }
         try {
+            if (file.length() != source.sizeBytes) throw DownloadFailure.VerificationFailed("The pack holds ${file.length()} of its ${source.sizeBytes} bytes")
             file.inputStream().buffered().use { input ->
                 PackReader.forEachEntry(input, file.length()) { entry ->
                     val sizeBytes = wanted[entry.sha256] ?: return@forEachEntry
@@ -100,6 +101,8 @@ class Downloader(
                 }
             }
             return file.length()
+        } catch (failure: DownloadFailure) {
+            throw failure
         } catch (exception: Exception) {
             throw DownloadFailure.VerificationFailed("The pack did not verify: ${exception.message}")
         } finally {
