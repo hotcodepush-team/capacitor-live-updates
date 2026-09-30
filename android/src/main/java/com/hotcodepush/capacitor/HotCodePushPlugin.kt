@@ -69,6 +69,12 @@ class HotCodePushPlugin : Plugin(), CoreListener {
         scope.launch { core.handleAppStart() }
     }
 
+    override fun handleOnPause() {
+        super.handleOnPause()
+        val core = core ?: return
+        scope.launch { core.handleAppPause() }
+    }
+
     override fun handleOnResume() {
         super.handleOnResume()
         registerWebViewListener()

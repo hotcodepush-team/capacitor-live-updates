@@ -34,6 +34,7 @@ class Core(
     private var isRestartAllowed = true
     private var queuedRestart: (() -> Unit)? = null
     private var isStartSyncPending = false
+    private var backgroundedAt: Long? = null
     private var resolvedChannelName: Pair<String, String>? = null
 
     // Lifecycle
@@ -70,7 +71,18 @@ class Core(
         ReadyResult(state.currentRelease, rollback?.from, rollback != null, rollback?.reason)
     }
 
+    suspend fun handleAppPause() = lock.withLock {
+        backgroundedAt = clock.now()
+    }
+
+    /** A resume installs an `on-resume` release after enough time in the background, else syncs when the interval has passed. */
     suspend fun handleAppResume() = lock.withLock {
+        val backgroundDuration = backgroundedAt?.let { (clock.now() - it) / 1000.0 }
+        backgroundedAt = null
+        if (backgroundDuration != null && configuration.installStrategy == InstallStrategy.ON_RESUME && state.nextRelease != null && backgroundDuration >= configuration.minimumBackgroundDuration) {
+            installNextRelease()
+            return
+        }
         if (!configuration.autoSync) return
         val lastSyncAt = state.lastSyncAt ?: Long.MIN_VALUE
         if (clock.now() - lastSyncAt >= configuration.syncInterval * 1000) scope.launch { sync(SyncTrigger.RESUME) }

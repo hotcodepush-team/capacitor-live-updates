@@ -20,6 +20,7 @@ public actor Core {
     private var isRestartAllowed = true
     private var queuedRestart: (() -> Void)?
     private var isStartSyncPending = false
+    private var backgroundedAt: Date?
     private var resolvedChannelName: (name: String, id: String)?
 
     public init(configuration: Configuration, device: DeviceFacts, store: KeyValueStore, files: FileStore, embedded: EmbeddedBundle, http: HttpClient, loader: BundleLoader, listener: CoreListener, scheduler: Scheduler = DispatchScheduler(), clock: Clock = SystemClock(), temporaryDirectory: URL = FileManager.default.temporaryDirectory) {
@@ -74,7 +75,18 @@ public actor Core {
         return ReadyResult(currentRelease: state.currentRelease, previousRelease: rollback?.from, isRolledBack: rollback != nil, rollbackReason: rollback?.reason)
     }
 
+    public func handleAppPause() {
+        backgroundedAt = clock.now
+    }
+
+    /// A resume installs an `on-resume` release after enough time in the background, else syncs when the interval has passed.
     public func handleAppResume() {
+        let backgroundDuration = backgroundedAt.map { clock.now.timeIntervalSince($0) }
+        backgroundedAt = nil
+        if let duration = backgroundDuration, configuration.installStrategy == .onResume, state.nextRelease != nil, duration >= configuration.minimumBackgroundDuration {
+            installNextRelease()
+            return
+        }
         guard configuration.autoSync else { return }
         let lastSyncAt = state.lastSyncAt ?? .distantPast
         if clock.now.timeIntervalSince(lastSyncAt) >= configuration.syncInterval {

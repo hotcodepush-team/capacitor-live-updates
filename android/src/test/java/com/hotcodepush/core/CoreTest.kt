@@ -321,6 +321,40 @@ class CoreTest {
     }
 
     @Test
+    fun shouldInstallAnOnResumeReleaseAfterTheMinimumBackgroundDuration() = runBlocking {
+        val harness = Harness(Fixture.configuration(installStrategy = InstallStrategy.ON_RESUME))
+        val v2 = Fixture.release(1, "b2", v2Content)
+        harness.publish(listOf(v2), 1)
+        harness.core.handleAppStart()
+        assertEquals(InstallMoment.ON_RESUME, harness.core.sync(SyncTrigger.CALL).installAt)
+        harness.core.handleAppPause()
+        harness.clock.now += 300_000
+        harness.core.handleAppResume()
+        assertEquals(listOf("b2"), harness.loader.loaded)
+        val status = harness.core.status()
+        assertEquals(v2.release.release, status.currentRelease)
+        assertNull(status.nextRelease)
+        assertEquals(1, harness.scheduler.tasks.size)
+    }
+
+    @Test
+    fun shouldKeepAnOnResumeReleaseWaitingAfterAShortBackground() = runBlocking {
+        val harness = Harness(Fixture.configuration(installStrategy = InstallStrategy.ON_RESUME))
+        val v2 = Fixture.release(1, "b2", v2Content)
+        harness.publish(listOf(v2), 1)
+        harness.core.handleAppStart()
+        harness.core.sync(SyncTrigger.CALL)
+        harness.core.handleAppResume()
+        harness.core.handleAppPause()
+        harness.clock.now += 299_000
+        harness.core.handleAppResume()
+        assertTrue(harness.loader.loaded.isEmpty())
+        val status = harness.core.status()
+        assertNull(status.currentRelease)
+        assertEquals(v2.release.release, status.nextRelease)
+    }
+
+    @Test
     fun shouldSkipOnAMeteredConnectionUnderTheUnmeteredPolicy() = runBlocking {
         val harness = Harness()
         harness.loader.isMetered = true

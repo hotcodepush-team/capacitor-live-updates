@@ -113,8 +113,12 @@ final class ManualScheduler: Scheduler {
     }
 }
 
-struct FixedClock: Clock {
+final class FixedClock: Clock {
     var now: Date
+
+    init(now: Date) {
+        self.now = now
+    }
 }
 
 final class InMemoryEmbeddedBundle: EmbeddedBundle {
@@ -191,7 +195,7 @@ final class Harness {
     let listener = FakeListener()
     let scheduler = ManualScheduler()
     let embedded = InMemoryEmbeddedBundle()
-    var clock = FixedClock(now: Fixture.builtAt.addingTimeInterval(3600))
+    let clock = FixedClock(now: Fixture.builtAt.addingTimeInterval(3600))
     let files: FileStore
     var core: Core
 

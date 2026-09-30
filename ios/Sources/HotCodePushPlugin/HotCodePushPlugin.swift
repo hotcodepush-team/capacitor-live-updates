@@ -50,8 +50,13 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
             listener: self)
         self.loader = loader
         self.core = core
+        NotificationCenter.default.addObserver(self, selector: #selector(handleDidEnterBackground), name: UIApplication.didEnterBackgroundNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(handleWillEnterForeground), name: UIApplication.willEnterForegroundNotification, object: nil)
         Task { await core.handleAppStart() }
+    }
+
+    @objc private func handleDidEnterBackground() {
+        Task { await core?.handleAppPause() }
     }
 
     @objc private func handleWillEnterForeground() {

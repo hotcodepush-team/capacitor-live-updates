@@ -307,6 +307,39 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(harness.files.bundleIds(), [])
     }
 
+    func testShouldInstallAnOnResumeReleaseAfterTheMinimumBackgroundDuration() async {
+        let harness = Harness(configuration: Fixture.configuration(installStrategy: .onResume))
+        let v2 = Fixture.release(number: 1, bundleId: "b2", content: Data("<html>v2</html>".utf8))
+        harness.publish([v2], sequence: 1)
+        await harness.core.handleAppStart()
+        let result = await harness.core.sync(trigger: .call)
+        XCTAssertEqual(result.installAt, .onResume)
+        await harness.core.handleAppPause()
+        harness.clock.now = harness.clock.now.addingTimeInterval(300)
+        await harness.core.handleAppResume()
+        XCTAssertEqual(harness.loader.loaded, ["b2"])
+        let status = await harness.core.status()
+        XCTAssertEqual(status.currentRelease, v2.release.release)
+        XCTAssertNil(status.nextRelease)
+        XCTAssertEqual(harness.scheduler.tasks.count, 1)
+    }
+
+    func testShouldKeepAnOnResumeReleaseWaitingAfterAShortBackground() async {
+        let harness = Harness(configuration: Fixture.configuration(installStrategy: .onResume))
+        let v2 = Fixture.release(number: 1, bundleId: "b2", content: Data("<html>v2</html>".utf8))
+        harness.publish([v2], sequence: 1)
+        await harness.core.handleAppStart()
+        _ = await harness.core.sync(trigger: .call)
+        await harness.core.handleAppResume()
+        await harness.core.handleAppPause()
+        harness.clock.now = harness.clock.now.addingTimeInterval(299)
+        await harness.core.handleAppResume()
+        XCTAssertEqual(harness.loader.loaded, [])
+        let status = await harness.core.status()
+        XCTAssertNil(status.currentRelease)
+        XCTAssertEqual(status.nextRelease, v2.release.release)
+    }
+
     func testShouldSkipOnAMeteredConnectionUnderTheUnmeteredPolicy() async {
         let harness = Harness()
         harness.loader.isMetered = true
