@@ -102,9 +102,14 @@ final class FixtureTests: XCTestCase {
             let content: String
             let sha256: String
         }
+        struct RefusedPack: Decodable {
+            let name: String
+            let packBase64: String
+        }
         let entries: [Entry]
         let packBase64: String
         let packSha256: String
+        let refusedPacks: [RefusedPack]
     }
 
     private func load<T: Decodable>(_ path: String, as type: T.Type) throws -> T {
@@ -160,5 +165,16 @@ final class FixtureTests: XCTestCase {
             XCTAssertEqual(Hashing.sha256Hex(entry.body), expected.sha256)
         }
         XCTAssertEqual(PackWriter.pack(entries), pack)
+    }
+
+    func testShouldRefuseEveryRefusedPackFixture() throws {
+        let fixture = try load("packs.json", as: PackFile.self)
+        XCTAssertFalse(fixture.refusedPacks.isEmpty)
+        for refused in fixture.refusedPacks {
+            let pack = try XCTUnwrap(Data(base64Encoded: refused.packBase64), refused.name)
+            XCTAssertThrowsError(try PackReader.entries(in: pack), refused.name) { error in
+                XCTAssertTrue(error is PackReader.Failure, refused.name)
+            }
+        }
     }
 }

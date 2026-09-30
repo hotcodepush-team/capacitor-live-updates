@@ -14,7 +14,14 @@ final class PackTests: XCTestCase {
 
     func testShouldRejectATruncatedPack() {
         let pack = PackWriter.pack([PackEntry(sha256: "abc", body: Data(count: 700))])
-        XCTAssertThrowsError(try PackReader.entries(in: pack.prefix(600)))
+        XCTAssertThrowsError(try PackReader.entries(in: pack.prefix(600))) { error in
+            XCTAssertEqual(error as? PackReader.Failure, .truncated)
+        }
+    }
+
+    func testShouldIgnoreBytesAfterTheEndOfArchiveBlocks() throws {
+        let pack = PackWriter.pack([PackEntry(sha256: "abc", body: Data("x".utf8))]) + Data("trailing".utf8)
+        XCTAssertEqual(try PackReader.entries(in: pack).map { $0.sha256 }, ["abc"])
     }
 
     func testShouldRefuseAnEntryWithANegativeSize() {

@@ -25,6 +25,12 @@ class PackTest {
         PackReader.entries(PackWriter.pack(listOf(PackEntry("abc", ByteArray(700)))).copyOf(600))
     }
 
+    @Test
+    fun shouldIgnoreBytesAfterTheEndOfArchiveBlocks() {
+        val pack = PackWriter.pack(listOf(PackEntry("abc", "x".toByteArray()))) + "trailing".toByteArray()
+        assertEquals(listOf("abc"), PackReader.entries(pack).map { it.sha256 })
+    }
+
     @Test(expected = PackFormatException::class)
     fun shouldRefuseAnEntryLargerThanWhatIsLeftOfThePackBeforeAllocatingIt() {
         val pack = PackWriter.pack(listOf(PackEntry("abc", ByteArray(700))))

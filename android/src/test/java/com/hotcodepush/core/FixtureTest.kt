@@ -2,6 +2,7 @@ package com.hotcodepush.core
 
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -108,5 +109,16 @@ class FixtureTest {
             assertEquals(entry.getString("content"), String(entries[index].body, Charsets.UTF_8))
         }
         assertTrue(PackWriter.pack(entries).contentEquals(pack))
+    }
+
+    @Test
+    fun shouldRefuseEveryRefusedPackFixture() {
+        val cases = load("packs.json").getJSONArray("refusedPacks")
+        assertTrue(cases.length() > 0)
+        for (index in 0 until cases.length()) {
+            val case = cases.getJSONObject(index)
+            val pack = Base64.getDecoder().decode(case.getString("packBase64"))
+            assertThrows(case.getString("name"), PackFormatException::class.java) { PackReader.entries(pack) }
+        }
     }
 }

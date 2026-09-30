@@ -6,11 +6,12 @@ public struct PackEntry {
     public let body: Data
 }
 
-/// Reads the pack format: an uncompressed ustar archive whose entries are named by their content hash.
+/// Reads the pack format: an uncompressed ustar archive whose entries are named by their content hash and whose end is two zero blocks.
 public enum PackReader {
     public enum Failure: Error, Equatable {
         case truncated
         case invalidHeader
+        case unterminated
     }
 
     private static let blockSize = 512
@@ -21,14 +22,15 @@ public enum PackReader {
         return entries
     }
 
+    /// Reads entry after entry up to the two end-of-archive blocks: a pack that ends before them is refused, and anything after them is ignored.
     public static func forEachEntry(in data: Data, _ body: (PackEntry) throws -> Void) throws {
         var offset = 0
-        while offset + blockSize <= data.count {
-            let header = data.subdata(in: offset..<(offset + blockSize))
-            if header.allSatisfy({ $0 == 0 }) {
+        while true {
+            let header = try block(at: offset, in: data)
+            if isZero(header) {
+                guard isZero(try block(at: offset + blockSize, in: data)) else { throw Failure.unterminated }
                 return
             }
-            guard header.count == blockSize else { throw Failure.invalidHeader }
             let name = string(in: header, from: 0, length: 100)
             guard let size = Int(string(in: header, from: 124, length: 12), radix: 8), size >= 0 else { throw Failure.invalidHeader }
             let start = offset + blockSize
@@ -37,6 +39,15 @@ public enum PackReader {
             try body(PackEntry(sha256: name, body: data.subdata(in: start..<end)))
             offset = start + ((size + blockSize - 1) / blockSize) * blockSize
         }
+    }
+
+    private static func block(at offset: Int, in data: Data) throws -> Data {
+        guard offset + blockSize <= data.count else { throw Failure.unterminated }
+        return data.subdata(in: offset..<(offset + blockSize))
+    }
+
+    private static func isZero(_ block: Data) -> Bool {
+        return block.allSatisfy { $0 == 0 }
     }
 
     private static func string(in header: Data, from start: Int, length: Int) -> String {

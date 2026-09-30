@@ -12,20 +12,26 @@ class PackFormatException(message: String) : Exception(message)
 
 class GzipSizeException(maximumBytes: Long) : Exception("The content inflates past its $maximumBytes bytes")
 
-/** Reads the pack format: an uncompressed ustar archive whose entries are named by their content hash. */
+/** Reads the pack format: an uncompressed ustar archive whose entries are named by their content hash and whose end is two zero blocks. */
 object PackReader {
     private const val BLOCK_SIZE = 512
 
     fun entries(bytes: ByteArray): List<PackEntry> = buildList { forEachEntry(ByteArrayInputStream(bytes), bytes.size.toLong()) { add(it) } }
 
-    /** Reads the `length` bytes of the input; an entry the header claims larger than what is left is refused before anything is allocated for it. */
+    /**
+     * Reads the `length` bytes of the input entry after entry up to the two end-of-archive blocks: a pack that ends before them is refused,
+     * anything after them is ignored, and an entry the header claims larger than what is left is refused before anything is allocated for it.
+     */
     fun forEachEntry(input: InputStream, length: Long, body: (PackEntry) -> Unit) {
         val header = ByteArray(BLOCK_SIZE)
         var remaining = length
         while (true) {
-            val read = input.readFully(header)
-            if (read < BLOCK_SIZE || header.all { it == 0.toByte() }) return
+            if (input.readFully(header) < BLOCK_SIZE) throw PackFormatException("The pack ends before its end-of-archive blocks")
             remaining -= BLOCK_SIZE
+            if (header.isZero()) {
+                if (input.readFully(header) < BLOCK_SIZE || !header.isZero()) throw PackFormatException("A zero block is not followed by the second end-of-archive block")
+                return
+            }
             val name = field(header, 0, 100)
             val size = field(header, 124, 12).toIntOrNull(8)?.takeIf { it >= 0 } ?: throw PackFormatException("Invalid size field")
             val padding = (BLOCK_SIZE - size % BLOCK_SIZE) % BLOCK_SIZE
@@ -42,6 +48,8 @@ object PackReader {
         val end = (start until start + length).firstOrNull { header[it] == 0.toByte() } ?: (start + length)
         return String(header, start, end - start, Charsets.US_ASCII).trim()
     }
+
+    private fun ByteArray.isZero(): Boolean = all { it == 0.toByte() }
 
     private fun InputStream.readFully(buffer: ByteArray): Int {
         var total = 0
