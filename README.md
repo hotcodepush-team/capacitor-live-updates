@@ -15,6 +15,8 @@ A consumer pins a commit and bumps it deliberately; the preview comment on each 
 
 The plugin reads `hotcodepush.json` from the app's resources, which `npx hotcodepush init` writes and the embed step carries into every native build.
 
+On Android the plugin keeps its store out of device backups and transfers: its manifest sets `android:fullBackupContent` and `android:dataExtractionRules` on `<application>`, merged into the app's manifest. An app that already sets either attribute hits a manifest-merger conflict. Add `tools:replace="android:fullBackupContent"` or `tools:replace="android:dataExtractionRules"` to your own `<application>`, and put `<exclude domain="file" path="hotcodepush/" />` into your own rules, inside both `<cloud-backup>` and `<device-transfer>` for the extraction rules; otherwise the store rides along in the backup again.
+
 ## Usage
 
 ```ts
