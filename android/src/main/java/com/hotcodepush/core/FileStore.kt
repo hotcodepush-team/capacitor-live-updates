@@ -1,5 +1,6 @@
 package com.hotcodepush.core
 
+import android.os.Build
 import java.io.File
 import java.nio.file.Files
 
@@ -85,10 +86,14 @@ object BundleProjection {
         }
     }
 
-    private fun link(source: File, destination: File): Boolean = try {
-        Files.createLink(destination.toPath(), source.toPath())
-        true
-    } catch (throwable: Throwable) {
-        false
+    /** `Files.createLink` arrived with API 26; below it, and wherever a link fails, the tree is a copy. */
+    private fun link(source: File, destination: File): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false
+        return try {
+            Files.createLink(destination.toPath(), source.toPath())
+            true
+        } catch (exception: Exception) {
+            false
+        }
     }
 }
