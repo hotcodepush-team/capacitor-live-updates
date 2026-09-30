@@ -1,8 +1,10 @@
 package com.hotcodepush.core
 
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -62,6 +64,26 @@ class DownloaderTest {
         val manifest = bundle.manifest.copy(pack = BundleManifest.Pack(DownloaderHarness.PACK_URL, bundle.pack.size + 1L))
         assertEquals(FailedReason.VERIFICATION_FAILED, harness.downloadFailure(harness.publish(manifest, bundle.pack))?.reason)
         assertEquals(emptyList<String>(), File(harness.root, "tmp").list()?.toList())
+    }
+
+    @Test
+    fun shouldStoreASingleFileThatIsItselfGzipAsItArrives() {
+        val harness = DownloaderHarness()
+        val archive = Gzip.compress("console.log('precompressed')".toByteArray())
+        val sha256 = Hashing.sha256Hex(archive)
+        val manifest = BundleManifest(DownloaderHarness.BUNDLE_ID, Fixture.APP_ID, "1.2.0", Fixture.BUILT_AT, listOf(BundleManifest.File("assets/app.js.gz", sha256, archive.size.toLong())), null, emptyList())
+        harness.http.stub("${Fixture.FILES_BASE_URL}/apps/${Fixture.APP_ID}/files/$sha256", body = archive)
+        assertNull(harness.downloadFailure(harness.publish(manifest)))
+        assertArrayEquals(archive, harness.files.file(sha256).readBytes())
+    }
+
+    @Test
+    fun shouldRefuseAPackEntryThatIsNotGzip() {
+        val harness = DownloaderHarness()
+        val pack = PackWriter.pack(listOf(indexHtml, appJs).map { PackEntry(Hashing.sha256Hex(it), it) })
+        val manifest = DownloaderHarness.bundle(mapOf("index.html" to indexHtml, "app.js" to appJs)).manifest.copy(pack = BundleManifest.Pack(DownloaderHarness.PACK_URL, pack.size.toLong()))
+        assertEquals(FailedReason.VERIFICATION_FAILED, harness.downloadFailure(harness.publish(manifest, pack))?.reason)
+        assertFalse(harness.files.hasFile(Hashing.sha256Hex(indexHtml)))
     }
 
     @Test

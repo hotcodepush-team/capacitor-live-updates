@@ -56,6 +56,26 @@ final class DownloaderTests: XCTestCase {
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: harness.root.appendingPathComponent("tmp").path), [])
     }
 
+    func testShouldStoreASingleFileThatIsItselfGzipAsItArrives() async throws {
+        let harness = DownloaderHarness()
+        let archive = try Gzip.compress(Data("console.log('precompressed')".utf8))
+        let manifest = BundleManifest(bundleId: DownloaderHarness.bundleId, appId: Fixture.appId, version: "1.2.0", createdAt: Fixture.builtAt, files: [.init(path: "assets/app.js.gz", sha256: Hashing.sha256Hex(archive), sizeBytes: archive.count)])
+        harness.http.stub("\(Fixture.filesBaseUrl)/apps/\(Fixture.appId)/files/\(Hashing.sha256Hex(archive))", body: archive)
+        let failure = await harness.downloadFailure(harness.publish(manifest))
+        XCTAssertNil(failure)
+        XCTAssertEqual(try Data(contentsOf: harness.files.fileURL(sha256: Hashing.sha256Hex(archive))), archive)
+    }
+
+    func testShouldRefuseAPackEntryThatIsNotGzip() async {
+        let harness = DownloaderHarness()
+        let pack = PackWriter.pack([indexHtml, appJs].map { PackEntry(sha256: Hashing.sha256Hex($0), body: $0) })
+        let files = DownloaderHarness.bundle(["index.html": indexHtml, "app.js": appJs]).manifest.files
+        let manifest = BundleManifest(bundleId: DownloaderHarness.bundleId, appId: Fixture.appId, version: "1.2.0", createdAt: Fixture.builtAt, files: files, pack: .init(url: DownloaderHarness.packUrl, sizeBytes: pack.count))
+        let failure = await harness.downloadFailure(harness.publish(manifest, pack: pack))
+        XCTAssertEqual(failure?.reason, .verificationFailed)
+        XCTAssertFalse(harness.files.hasFile(sha256: Hashing.sha256Hex(indexHtml)))
+    }
+
     func testShouldRefuseASingleFileLargerThanItsSize() async {
         let harness = DownloaderHarness()
         let manifest = BundleManifest(bundleId: DownloaderHarness.bundleId, appId: Fixture.appId, version: "1.2.0", createdAt: Fixture.builtAt, files: [.init(path: "index.html", sha256: Hashing.sha256Hex(indexHtml), sizeBytes: indexHtml.count - 1)])

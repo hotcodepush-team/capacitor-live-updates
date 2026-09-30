@@ -108,7 +108,8 @@ public final class Downloader {
         throw DownloadFailure.downloadFailed("The download needs \(requiredBytes) bytes and \(availableBytes) are free")
     }
 
-    /// Streams the pack to disk, resuming what an earlier attempt left and never past its size in the manifest, then inflates each wanted entry up to its file's size.
+    /// Streams the pack to disk, resuming what an earlier attempt left and never past its size in the manifest, then inflates each
+    /// wanted entry up to its file's size: an entry is always the gzip bytes the bucket serves.
     func downloadPack(_ source: BundleManifest.Pack, bundleId: String, wanted: [String: Int], progress: @escaping (Int, Int) -> Void) async throws -> Int {
         let url = try resolvePinnedUrl(source.url)
         let file = temporaryDirectory.appendingPathComponent("\(bundleId)-\(Hashing.sha256Hex(source.url).prefix(16)).pack")
@@ -125,7 +126,7 @@ public final class Downloader {
         do {
             try PackReader.forEachEntry(in: data) { entry in
                 guard let sizeBytes = wanted[entry.sha256] else { return }
-                try files.writeFile(try Gzip.decompressIfCompressed(entry.body, maximumBytes: sizeBytes), sha256: entry.sha256)
+                try files.writeFile(try Gzip.decompress(entry.body, maximumBytes: sizeBytes), sha256: entry.sha256)
             }
         } catch let failure as DownloadFailure {
             throw failure
@@ -144,7 +145,8 @@ public final class Downloader {
         return url
     }
 
-    /// One file through the same bounded stream as the pack, never past its size in the manifest.
+    /// One file through the same bounded stream as the pack, never past its size in the manifest; the HTTP client already
+    /// decoded the gzip the bucket serves, so the body is the content, whatever bytes it starts with.
     func downloadFile(_ file: BundleManifest.File) async throws -> Int {
         guard let url = URL(string: "\(configuration.filesBaseUrl)/apps/\(configuration.appId)/files/\(file.sha256)") else { throw DownloadFailure.downloadFailed("Invalid file URL") }
         let temporary = temporaryDirectory.appendingPathComponent("\(file.sha256).file")
@@ -157,13 +159,12 @@ public final class Downloader {
         } catch {
             throw DownloadFailure.downloadFailed("The file \(file.path) could not be downloaded: \(error.localizedDescription)")
         }
-        guard let body = try? Data(contentsOf: temporary) else { throw DownloadFailure.downloadFailed("The file \(file.path) could not be read") }
-        let content = (try? Gzip.decompressIfCompressed(body, maximumBytes: file.sizeBytes)) ?? body
+        guard let content = try? Data(contentsOf: temporary) else { throw DownloadFailure.downloadFailed("The file \(file.path) could not be read") }
         do {
             try files.writeFile(content, sha256: file.sha256)
         } catch {
             throw DownloadFailure.verificationFailed("The file \(file.path) did not match its hash")
         }
-        return body.count
+        return content.count
     }
 }

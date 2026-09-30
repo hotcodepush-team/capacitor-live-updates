@@ -75,13 +75,8 @@ object PackWriter {
     }
 }
 
-/** Decodes the gzip bytes the bucket serves into the file's content. */
+/** Decodes a pack entry, the gzip bytes the bucket serves, into the file's content. */
 object Gzip {
-    /** Gzip bytes carry the `1f 8b` magic; anything else is stored as it is. */
-    fun isCompressed(bytes: ByteArray): Boolean = bytes.size >= 2 && bytes[0] == 0x1f.toByte() && bytes[1] == 0x8b.toByte()
-
-    fun decompressIfCompressed(bytes: ByteArray, maximumBytes: Long): ByteArray = if (isCompressed(bytes)) decompress(bytes, maximumBytes) else bytes
-
     /** Inflates at most `maximumBytes`, the file's size: a few bytes that would inflate to gigabytes are refused on the way. */
     fun decompress(bytes: ByteArray, maximumBytes: Long): ByteArray {
         if (bytes.isEmpty()) return bytes

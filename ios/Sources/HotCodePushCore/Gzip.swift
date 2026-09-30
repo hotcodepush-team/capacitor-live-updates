@@ -1,20 +1,11 @@
 import Foundation
 import zlib
 
-/// Decodes the gzip bytes the bucket serves into the file's content.
+/// Decodes a pack entry, the gzip bytes the bucket serves, into the file's content.
 public enum Gzip {
     public enum Failure: Error, Equatable {
         case corrupt(Int32)
         case tooLarge(maximumBytes: Int)
-    }
-
-    /// Gzip bytes carry the `1f 8b` magic; anything else is stored as it is.
-    public static func isCompressed(_ data: Data) -> Bool {
-        return data.count >= 2 && data[data.startIndex] == 0x1f && data[data.startIndex + 1] == 0x8b
-    }
-
-    public static func decompressIfCompressed(_ data: Data, maximumBytes: Int) throws -> Data {
-        return isCompressed(data) ? try decompress(data, maximumBytes: maximumBytes) : data
     }
 
     /// Inflates at most `maximumBytes`, the file's size: a few bytes that would inflate to gigabytes are refused on the way.

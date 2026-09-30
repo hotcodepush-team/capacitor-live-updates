@@ -81,7 +81,10 @@ class Downloader(
         if (availableBytes < requiredBytes) throw DownloadFailure.DownloadFailed("The download needs $requiredBytes bytes and $availableBytes are free")
     }
 
-    /** Streams the pack to disk, resuming what an earlier attempt left and never past its size in the manifest, then inflates each wanted entry up to its file's size. */
+    /**
+     * Streams the pack to disk, resuming what an earlier attempt left and never past its size in the manifest, then inflates
+     * each wanted entry up to its file's size: an entry is always the gzip bytes the bucket serves.
+     */
     internal suspend fun downloadPack(source: BundleManifest.Pack, bundleId: String, wanted: Map<String, Long>, progress: (Long, Long) -> Unit): Long {
         val pinnedUrl = resolvePinnedUrl(source.url)
         val file = File(temporaryDirectory, "$bundleId-${Hashing.sha256Hex(source.url).take(16)}.pack")
@@ -97,7 +100,7 @@ class Downloader(
             file.inputStream().buffered().use { input ->
                 PackReader.forEachEntry(input, file.length()) { entry ->
                     val sizeBytes = wanted[entry.sha256] ?: return@forEachEntry
-                    files.writeFile(Gzip.decompressIfCompressed(entry.body, sizeBytes), entry.sha256)
+                    files.writeFile(Gzip.decompress(entry.body, sizeBytes), entry.sha256)
                 }
             }
             return file.length()
@@ -117,7 +120,10 @@ class Downloader(
         return url
     }
 
-    /** One file through the same bounded stream as the pack, never past its size in the manifest. */
+    /**
+     * One file through the same bounded stream as the pack, never past its size in the manifest; the HTTP client already
+     * decoded the gzip the bucket serves, so the body is the content, whatever bytes it starts with.
+     */
     internal suspend fun downloadFile(file: BundleManifest.File): Long {
         val url = "${configuration.filesBaseUrl}/apps/${configuration.appId}/files/${file.sha256}"
         val temporary = File(temporaryDirectory, "${file.sha256}.file")
@@ -130,14 +136,13 @@ class Downloader(
             } catch (exception: Exception) {
                 throw DownloadFailure.DownloadFailed("The file ${file.path} could not be downloaded: ${exception.message}")
             }
-            val body = temporary.readBytes()
-            val content = runCatching { Gzip.decompressIfCompressed(body, file.sizeBytes) }.getOrDefault(body)
+            val content = temporary.readBytes()
             try {
                 files.writeFile(content, file.sha256)
             } catch (exception: HashMismatchException) {
                 throw DownloadFailure.VerificationFailed("The file ${file.path} did not match its hash")
             }
-            return body.size.toLong()
+            return content.size.toLong()
         } finally {
             temporary.delete()
         }
