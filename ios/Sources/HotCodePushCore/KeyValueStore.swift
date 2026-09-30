@@ -25,17 +25,3 @@ public final class UserDefaultsStore: KeyValueStore {
         }
     }
 }
-
-public final class InMemoryStore: KeyValueStore {
-    public private(set) var values: [String: String] = [:]
-
-    public init() {}
-
-    public func string(forKey key: String) -> String? {
-        return values[key]
-    }
-
-    public func set(_ value: String?, forKey key: String) {
-        values[key] = value
-    }
-}

@@ -46,6 +46,16 @@ class FakeHttpClient : HttpClient {
     }
 }
 
+class InMemoryStore : KeyValueStore {
+    val values = mutableMapOf<String, String>()
+
+    override fun getString(key: String): String? = values[key]
+
+    override fun putString(key: String, value: String?) {
+        if (value == null) values.remove(key) else values[key] = value
+    }
+}
+
 class FakeLoader(private val root: File) : BundleLoader {
     var persisted: String? = null
     var hasPersisted = false

@@ -4,7 +4,6 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.util.zip.GZIPInputStream
-import java.util.zip.GZIPOutputStream
 
 /** One entry of a pack: the file's hash and its stored bytes, gzip as the bucket serves them. */
 data class PackEntry(val sha256: String, val body: ByteArray)
@@ -55,26 +54,6 @@ object PackReader {
     }
 }
 
-/** Writes the same format; the SDK only reads packs, the writer exists for the tests. */
-object PackWriter {
-    fun pack(entries: List<PackEntry>): ByteArray {
-        val output = ByteArrayOutputStream()
-        for (entry in entries) {
-            val header = ByteArray(512)
-            entry.sha256.toByteArray(Charsets.US_ASCII).copyInto(header, 0)
-            "%011o".format(entry.body.size).toByteArray(Charsets.US_ASCII).copyInto(header, 124)
-            for (index in 148 until 156) header[index] = 0x20
-            val checksum = header.sumOf { it.toInt() and 0xff }
-            ("%06o".format(checksum) + "\u0000").toByteArray(Charsets.US_ASCII).copyInto(header, 148)
-            output.write(header)
-            output.write(entry.body)
-            output.write(ByteArray((512 - entry.body.size % 512) % 512))
-        }
-        output.write(ByteArray(1024))
-        return output.toByteArray()
-    }
-}
-
 /** Decodes a pack entry, the gzip bytes the bucket serves, into the file's content. */
 object Gzip {
     /** Inflates at most `maximumBytes`, the file's size: a few bytes that would inflate to gigabytes are refused on the way. */
@@ -91,6 +70,4 @@ object Gzip {
             }
         }
     }
-
-    fun compress(bytes: ByteArray): ByteArray = ByteArrayOutputStream().also { output -> GZIPOutputStream(output).use { it.write(bytes) } }.toByteArray()
 }

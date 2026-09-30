@@ -46,6 +46,20 @@ final class FakeHttpClient: HttpClient {
     }
 }
 
+final class InMemoryStore: KeyValueStore {
+    private(set) var values: [String: String] = [:]
+
+    init() {}
+
+    func string(forKey key: String) -> String? {
+        return values[key]
+    }
+
+    func set(_ value: String?, forKey key: String) {
+        values[key] = value
+    }
+}
+
 final class FakeLoader: BundleLoader {
     let root: URL
     var persisted: String??

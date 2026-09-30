@@ -45,25 +45,3 @@ public enum PackReader {
         return (String(bytes: bytes, encoding: .ascii) ?? "").trimmingCharacters(in: .whitespaces)
     }
 }
-
-/// Writes the same format; the SDK only reads packs, the writer exists for the tests.
-public enum PackWriter {
-    public static func pack(_ entries: [PackEntry]) -> Data {
-        var data = Data()
-        for entry in entries {
-            var header = Data(count: 512)
-            header.replaceSubrange(0..<entry.sha256.utf8.count, with: Data(entry.sha256.utf8))
-            let size = String(format: "%011o", entry.body.count)
-            header.replaceSubrange(124..<(124 + 11), with: Data(size.utf8))
-            header.replaceSubrange(148..<156, with: Data(repeating: 0x20, count: 8))
-            let checksum = header.reduce(0) { $0 + Int($1) }
-            header.replaceSubrange(148..<(148 + 7), with: Data((String(format: "%06o", checksum) + "\u{0}").utf8))
-            data.append(header)
-            data.append(entry.body)
-            let padding = (512 - entry.body.count % 512) % 512
-            data.append(Data(count: padding))
-        }
-        data.append(Data(count: 1024))
-        return data
-    }
-}

@@ -37,29 +37,4 @@ public enum Gzip {
             return output
         }
     }
-
-    public static func compress(_ data: Data) throws -> Data {
-        var stream = z_stream()
-        var status = deflateInit2_(&stream, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 15 + 16, 8, Z_DEFAULT_STRATEGY, ZLIB_VERSION, Int32(MemoryLayout<z_stream>.size))
-        guard status == Z_OK else { throw Failure.corrupt(status) }
-        defer { deflateEnd(&stream) }
-        var output = Data()
-        let chunkSize = 64 * 1024
-        var chunk = [UInt8](repeating: 0, count: chunkSize)
-        var input = [UInt8](data)
-        return try input.withUnsafeMutableBufferPointer { inputPointer -> Data in
-            stream.next_in = inputPointer.baseAddress
-            stream.avail_in = UInt32(inputPointer.count)
-            repeat {
-                try chunk.withUnsafeMutableBufferPointer { chunkPointer in
-                    stream.next_out = chunkPointer.baseAddress
-                    stream.avail_out = UInt32(chunkSize)
-                    status = deflate(&stream, Z_FINISH)
-                    guard status == Z_OK || status == Z_STREAM_END || status == Z_BUF_ERROR else { throw Failure.corrupt(status) }
-                    output.append(chunkPointer.baseAddress!, count: chunkSize - Int(stream.avail_out))
-                }
-            } while status != Z_STREAM_END
-            return output
-        }
-    }
 }
