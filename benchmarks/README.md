@@ -32,6 +32,8 @@ node benchmarks/measure-cold-start.mjs /tmp/baseline/with --android emulator-555
 node benchmarks/measure-cold-start.mjs /tmp/baseline/without --android emulator-5554 --ios <udid>
 ```
 
+Start the Android emulator headless, `emulator -avd Pixel_9_Pro -no-window -gpu host`: macOS drops a windowed emulator to background priority within minutes, which inflates the load average and every cold start with it. Before each variant, press HOME and force-stop the app, so a reinstall does not relaunch it on its own.
+
 The demo is `hotcodepush-team/capacitor-live-updates-demo` at the commit `baseline.json` names; a new baseline names the commit it was measured against.
 
 ## The guard
