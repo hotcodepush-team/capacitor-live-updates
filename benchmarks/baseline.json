@@ -1,10 +1,10 @@
 {
-  "measuredAt": "2026-09-29",
+  "measuredAt": "2026-10-01",
   "plugin": {
-    "commit": "662c16fff16fdf6695ee5e3293bd61bb14ff7093"
+    "commit": "dcf810fbefcf5919437070bac3a01d93acd98aa4"
   },
   "demo": {
-    "commit": "83023d541e1103e133da69254ac466276001648a"
+    "commit": "a36aaef01b6b4643ba24373b75f92eeb1b3455fd"
   },
   "android": {
     "releaseApkBytes": {
@@ -13,11 +13,14 @@
       "added": 599998
     },
     "coldStartMs": {
-      "with": null,
-      "without": null,
-      "added": null,
-      "device": "Pixel_9_Pro emulator, Android 17 (API 37), 16 KB pages",
-      "note": "Not measured yet: on the measuring day the host sat at a load average of 50 to 90 and the emulator's services failed or the emulator died between variants (one with-plugin pass gave runs of 1307 to 3123 ms, unusable without its control); rerun measure-cold-start.mjs on a quiet host and commit the numbers."
+      "with": 1007,
+      "without": 860,
+      "added": 147,
+      "device": "Pixel_9_Pro emulator, headless with the host GPU, Android 17 (API 37), 16 KB pages",
+      "runsMs": {
+        "with": [1134, 1007, 981, 1039, 910],
+        "without": [862, 860, 831, 871, 859]
+      }
     }
   },
   "ios": {
