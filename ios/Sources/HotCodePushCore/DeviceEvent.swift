@@ -12,8 +12,10 @@ public struct DeviceEvent: Codable, Equatable {
     public let packKind: String?
     public let fromReleaseId: String?
     public let toReleaseId: String?
+    /// The app's `rollback({ reason })` on `REPORTED_BY_APP`: printable, at most 256 characters.
+    public let detail: String?
 
-    private init(type: String, releaseId: String? = nil, bundleId: String? = nil, status: String? = nil, reason: String? = nil, condition: ConditionType? = nil, bytes: Int? = nil, packKind: String? = nil, fromReleaseId: String? = nil, toReleaseId: String? = nil) {
+    private init(type: String, releaseId: String? = nil, bundleId: String? = nil, status: String? = nil, reason: String? = nil, condition: ConditionType? = nil, bytes: Int? = nil, packKind: String? = nil, fromReleaseId: String? = nil, toReleaseId: String? = nil, detail: String? = nil) {
         self.type = type
         self.releaseId = releaseId
         self.bundleId = bundleId
@@ -24,6 +26,7 @@ public struct DeviceEvent: Codable, Equatable {
         self.packKind = packKind
         self.fromReleaseId = fromReleaseId
         self.toReleaseId = toReleaseId
+        self.detail = detail
     }
 
     public static func checked(releaseId: String, status: SyncStatus, reason: SkippedReason? = nil, condition: ConditionType? = nil) -> DeviceEvent {
@@ -42,8 +45,8 @@ public struct DeviceEvent: Codable, Equatable {
         return DeviceEvent(type: "confirmed", releaseId: releaseId)
     }
 
-    public static func failed(releaseId: String, reason: String) -> DeviceEvent {
-        return DeviceEvent(type: "failed", releaseId: releaseId, reason: reason)
+    public static func failed(releaseId: String, reason: String, detail: String? = nil) -> DeviceEvent {
+        return DeviceEvent(type: "failed", releaseId: releaseId, reason: reason, detail: detail)
     }
 
     public static func rolledBack(fromReleaseId: String, toReleaseId: String?) -> DeviceEvent {

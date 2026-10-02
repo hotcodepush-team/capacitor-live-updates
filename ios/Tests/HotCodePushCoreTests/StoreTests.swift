@@ -4,13 +4,13 @@ import XCTest
 final class StoreTests: XCTestCase {
     func testShouldKeepTheIdentityKeysAndDropTheCacheOnAnUnknownStateVersion() {
         let store = InMemoryStore()
-        store.set("9", forKey: "hotcodepush.stateVersion")
+        store.set(9, forKey: "hotcodepush.stateVersion")
         store.set("{\"id\":\"r1\",\"number\":1,\"bundleId\":\"b1\",\"bundleVersion\":\"1\",\"isMandatory\":false}", forKey: "hotcodepush.currentRelease")
         store.set("device-1", forKey: "hotcodepush.deviceId")
         let state = StateStore(store: store)
         XCTAssertEqual(state.deviceId, "device-1")
         XCTAssertNil(state.currentRelease)
-        XCTAssertEqual(store.string(forKey: "hotcodepush.stateVersion"), "1")
+        XCTAssertEqual(store.integer(forKey: "hotcodepush.stateVersion"), 2)
     }
 
     func testShouldGenerateAStableDeviceIdOnce() {

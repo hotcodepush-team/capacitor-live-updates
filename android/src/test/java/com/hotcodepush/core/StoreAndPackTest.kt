@@ -57,13 +57,13 @@ class StateStoreTest {
     @Test
     fun shouldKeepTheIdentityKeysAndDropTheCacheOnAnUnknownStateVersion() {
         val store = InMemoryStore()
-        store.putString("hotcodepush.stateVersion", "9")
+        store.putInt("hotcodepush.stateVersion", 9)
         store.putString("hotcodepush.currentRelease", Release("r1", 1, "b1", "1", false).toJson().toString())
         store.putString("hotcodepush.deviceId", "device-1")
         val state = StateStore(store)
         assertEquals("device-1", state.deviceId)
         assertNull(state.currentRelease)
-        assertEquals("1", store.getString("hotcodepush.stateVersion"))
+        assertEquals(2, store.getInt("hotcodepush.stateVersion"))
     }
 
     @Test

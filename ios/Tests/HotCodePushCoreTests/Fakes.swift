@@ -48,6 +48,7 @@ final class FakeHttpClient: HttpClient {
 
 final class InMemoryStore: KeyValueStore {
     private(set) var values: [String: String] = [:]
+    private(set) var integers: [String: Int] = [:]
 
     init() {}
 
@@ -57,6 +58,14 @@ final class InMemoryStore: KeyValueStore {
 
     func set(_ value: String?, forKey key: String) {
         values[key] = value
+    }
+
+    func integer(forKey key: String) -> Int? {
+        return integers[key]
+    }
+
+    func set(_ value: Int?, forKey key: String) {
+        integers[key] = value
     }
 }
 
@@ -98,13 +107,15 @@ final class FakeLoader: BundleLoader {
 }
 
 final class FakeListener: CoreListener {
-    var started: [SyncTrigger] = []
-    var synced: [SyncResult] = []
+    var available: [UpdateAvailableEvent] = []
+    var downloaded: [UpdateDownloadedEvent] = []
+    var failed: [UpdateFailedEvent] = []
     var progress: [(String, Int, Int)] = []
     var rolledBack: [RolledBackEvent] = []
 
-    func syncStarted(trigger: SyncTrigger) { started.append(trigger) }
-    func synced(result: SyncResult, trigger: SyncTrigger) { synced.append(result) }
+    func updateAvailable(_ event: UpdateAvailableEvent) { available.append(event) }
+    func updateDownloaded(_ event: UpdateDownloadedEvent) { downloaded.append(event) }
+    func updateFailed(_ event: UpdateFailedEvent) { failed.append(event) }
     func downloadProgress(releaseId: String, downloadedBytes: Int, totalBytes: Int) { progress.append((releaseId, downloadedBytes, totalBytes)) }
     func rolledBack(_ event: RolledBackEvent) { rolledBack.append(event) }
 }
@@ -169,13 +180,16 @@ struct Fixture {
         return BundleManifest(bundleId: "embedded", appId: appId, version: "1.0.0", createdAt: builtAt, files: [.init(path: "index.html", sha256: Hashing.sha256Hex(embeddedIndexHtml), sizeBytes: embeddedIndexHtml.count)])
     }
 
-    static func configuration(installStrategy: InstallStrategy = .nextStart, autoSync: Bool = false, readySignal: ReadySignal = .render, publicKeys: [String] = [], fingerprint: String? = "fp1:abc", builtAt: Date = Fixture.builtAt, enabledInDebugBuilds: Bool = true) -> Configuration {
+    static func configuration(installStrategy: InstallStrategy = .nextStart, mandatoryInstallStrategy: MandatoryInstallStrategy = .immediate, downloadStrategy: DownloadStrategy = .auto, autoCheck: Bool = false, readySignal: ReadySignal = .render, publicKeys: [String] = [], fingerprint: String? = "fp1:abc", builtAt: Date = Fixture.builtAt, enabledInDebugBuilds: Bool = true) -> Configuration {
         let json: [String: Any] = [
             "appId": appId,
             "channelId": channelId,
-            "autoSync": autoSync,
-            "syncInterval": 900,
+            "autoCheck": autoCheck,
+            "checkInterval": 900,
+            "downloadStrategy": downloadStrategy.rawValue,
             "installStrategy": installStrategy.rawValue,
+            "mandatoryInstallStrategy": mandatoryInstallStrategy.rawValue,
+            "installOnResumeAfter": 300,
             "readySignal": readySignal.rawValue,
             "readyTimeout": 10,
             "enabledInDebugBuilds": enabledInDebugBuilds,

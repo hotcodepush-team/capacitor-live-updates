@@ -1,6 +1,7 @@
 package com.hotcodepush.core
 
 import org.json.JSONException
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Test
@@ -36,6 +37,21 @@ class WireTypesTest {
     }
 
     @Test
+    fun shouldRefuseAnIndexReleaseWhoseManifestHashIsNotALowercaseSha256() {
+        assertThrows(JSONException::class.java) { decodeIndexRelease("r1", "b1", manifestSha256 = sha256.uppercase()) }
+        assertThrows(JSONException::class.java) { decodeIndexRelease("r1", "b1", manifestSha256 = "../escape") }
+    }
+
+    @Test
+    fun shouldRefuseAnIndexReleaseMissingAFieldTheSwiftCoreRequires() {
+        val json = decodeIndexRelease("r1", "b1").toJson()
+        for (key in listOf("isMandatory", "rollout", "conditions", "sizeBytes")) {
+            val incomplete = JSONObject(json.toString()).also { it.remove(key) }
+            assertThrows(key, JSONException::class.java) { IndexRelease.fromJson(incomplete) }
+        }
+    }
+
+    @Test
     fun shouldAcceptTheIdsAndPathsTheApiWrites() {
         val bundleId = "0f8fad5b-d9cb-469f-a165-70867728950e"
         for (path in listOf("index.html", "assets/index-a1b2c3.js", ".well-known/assetlinks.json", "assets/..hidden")) {
@@ -49,8 +65,8 @@ class WireTypesTest {
         return BundleManifest.fromJson(manifest.toJson())
     }
 
-    private fun decodeIndexRelease(id: String, bundleId: String): IndexRelease {
-        val release = IndexRelease(id, 1, Fixture.BUILT_AT, false, null, 100, emptyList(), bundleId, "1.0.0", "${Fixture.FILES_BASE_URL}/manifest.json", sha256, 7)
+    private fun decodeIndexRelease(id: String, bundleId: String, manifestSha256: String = sha256): IndexRelease {
+        val release = IndexRelease(id, 1, Fixture.BUILT_AT, false, null, 100, emptyList(), bundleId, "1.0.0", "${Fixture.FILES_BASE_URL}/manifest.json", manifestSha256, 7)
         return IndexRelease.fromJson(release.toJson())
     }
 }

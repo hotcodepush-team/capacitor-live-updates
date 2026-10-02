@@ -1,12 +1,13 @@
 import Foundation
 
 public enum SyncTrigger: String, Codable {
-    case start, resume, interval, call
+    case start, resume, interval, manual
 }
 
 public enum SyncStatus: String, Codable {
     case upToDate = "UP_TO_DATE"
     case available = "AVAILABLE"
+    case downloaded = "DOWNLOADED"
     case updated = "UPDATED"
     case skipped = "SKIPPED"
     case failed = "FAILED"
@@ -41,14 +42,10 @@ public enum RollbackReason: String, Codable {
     case reportedByApp = "REPORTED_BY_APP"
 }
 
-public enum InstallMoment: String, Codable {
-    case now
-    case nextStart = "next-start"
-    case onResume = "on-resume"
-    case manual
-}
+/// When a downloaded update runs, in the strategies' vocabulary.
+public typealias InstallMoment = InstallStrategy
 
-/// One shape for `SyncResult` and `CheckResult`: the status says which fields are set.
+/// One shape for `SyncResult`, `CheckResult` and `DownloadResult`: the status says which fields are set.
 public struct SyncResult: Codable, Equatable {
     public let status: SyncStatus
     public let release: Release?
@@ -85,6 +82,8 @@ public struct SyncResult: Codable, Equatable {
         case .available:
             try container.encode(notes, forKey: .notes)
             try container.encode(downloadBytes, forKey: .downloadBytes)
+        case .downloaded:
+            try container.encode(notes, forKey: .notes)
         case .updated:
             try container.encode(notes, forKey: .notes)
             try container.encode(installAt, forKey: .installAt)
@@ -105,6 +104,10 @@ public struct SyncResult: Codable, Equatable {
         return SyncResult(status: .available, release: release, notes: notes, downloadBytes: downloadBytes)
     }
 
+    public static func downloaded(_ release: Release, notes: String?) -> SyncResult {
+        return SyncResult(status: .downloaded, release: release, notes: notes)
+    }
+
     public static func updated(_ release: Release, notes: String?, installAt: InstallMoment) -> SyncResult {
         return SyncResult(status: .updated, release: release, notes: notes, installAt: installAt)
     }
@@ -118,11 +121,44 @@ public struct SyncResult: Codable, Equatable {
     }
 }
 
-public struct ReadyResult: Codable, Equatable {
+public enum ApplyStatus: String, Codable {
+    case applied = "APPLIED"
+    case nothingToApply = "NOTHING_TO_APPLY"
+}
+
+/// What `applyUpdate()` answers: the update is the current release and the reload follows, or nothing waits.
+public struct ApplyResult: Codable, Equatable {
+    public let status: ApplyStatus
+    public let release: Release?
+
+    public init(status: ApplyStatus, release: Release?) {
+        self.status = status
+        self.release = release
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case status, release
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(status, forKey: .status)
+        try container.encode(release, forKey: .release)
+    }
+}
+
+public struct NotifyReadyResult: Codable, Equatable {
     public let currentRelease: Release?
     public let previousRelease: Release?
     public let isRolledBack: Bool
     public let rollbackReason: RollbackReason?
+
+    public init(currentRelease: Release?, previousRelease: Release?, isRolledBack: Bool, rollbackReason: RollbackReason?) {
+        self.currentRelease = currentRelease
+        self.previousRelease = previousRelease
+        self.isRolledBack = isRolledBack
+        self.rollbackReason = rollbackReason
+    }
 
     enum CodingKeys: String, CodingKey {
         case currentRelease, previousRelease, isRolledBack, rollbackReason
@@ -148,7 +184,8 @@ public struct IndexState: Codable, Equatable {
     public let fetchedAt: Date
 }
 
-public struct StatusResult: Codable, Equatable {
+/// The SDK's state, a snapshot: everything the debug screen shows.
+public struct StateResult: Codable, Equatable {
     public let currentRelease: Release?
     public let nextRelease: Release?
     public let fallbackRelease: Release?
@@ -226,6 +263,56 @@ public struct DeviceResult: Codable, Equatable {
     }
 }
 
+// MARK: Events — what the SDK did on its own; results answer what the app called.
+
+/// A check found a release the device qualifies for.
+public struct UpdateAvailableEvent: Codable, Equatable {
+    public let release: Release
+    public let notes: String?
+    public let downloadBytes: Int?
+    public let trigger: SyncTrigger
+
+    enum CodingKeys: String, CodingKey {
+        case release, notes, downloadBytes, trigger
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(release, forKey: .release)
+        try container.encode(notes, forKey: .notes)
+        try container.encode(downloadBytes, forKey: .downloadBytes)
+        try container.encode(trigger, forKey: .trigger)
+    }
+}
+
+/// The download completed and the update waits for its install.
+public struct UpdateDownloadedEvent: Codable, Equatable {
+    public let release: Release
+    public let installAt: InstallMoment
+    public let trigger: SyncTrigger
+}
+
+/// A check or a download failed.
+public struct UpdateFailedEvent: Codable, Equatable {
+    public let release: Release?
+    public let reason: FailedReason
+    public let message: String
+    public let trigger: SyncTrigger
+
+    enum CodingKeys: String, CodingKey {
+        case release, reason, message, trigger
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(release, forKey: .release)
+        try container.encode(reason, forKey: .reason)
+        try container.encode(message, forKey: .message)
+        try container.encode(trigger, forKey: .trigger)
+    }
+}
+
+/// At the start that follows a rollback, once, before the readiness gate; `to` is `null` for the embedded bundle.
 public struct RolledBackEvent: Codable, Equatable {
     public let from: Release
     public let to: Release?

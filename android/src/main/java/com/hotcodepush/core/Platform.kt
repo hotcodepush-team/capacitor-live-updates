@@ -29,13 +29,15 @@ interface BundleLoader {
     /** The bundle the WebView runs right now, `null` for the embedded bundle. */
     fun servedBundleId(): String?
 
-    /** Whether the connection is metered or constrained, for the `unmetered` network policy. */
+    /** Whether the connection is metered or constrained, for the `unmetered` download strategy. */
     fun isConnectionMetered(): Boolean
 }
 
+/** The five events, named by what happened to the update; a cycle's start and end fire nothing. */
 interface CoreListener {
-    fun syncStarted(trigger: SyncTrigger)
-    fun synced(result: SyncResult, trigger: SyncTrigger)
+    fun updateAvailable(event: UpdateAvailableEvent)
+    fun updateDownloaded(event: UpdateDownloadedEvent)
+    fun updateFailed(event: UpdateFailedEvent)
     fun downloadProgress(releaseId: String, downloadedBytes: Long, totalBytes: Long)
     fun rolledBack(event: RolledBackEvent)
 }
@@ -60,6 +62,11 @@ object AttributeRules {
 
     fun validate(key: String, value: String) {
         if (!keyPattern.matches(key)) throw PlainException("An attribute key is an identifier of letters, digits, '_', '-' and '.', at most 64 characters: $key")
-        if (value.length > 256 || value.any { it.code < 0x20 || it.code == 0x7F }) throw PlainException("An attribute value is a printable string without control characters, at most 256 characters")
+        validate(value)
+    }
+
+    /** The value rule alone, shared with the app's rollback reason. */
+    fun validate(value: String) {
+        if (value.length > 256 || value.any { it.code < 0x20 || it.code == 0x7F }) throw PlainException("A value is a printable string without control characters, at most 256 characters")
     }
 }

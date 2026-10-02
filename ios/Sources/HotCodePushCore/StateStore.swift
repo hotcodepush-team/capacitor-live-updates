@@ -53,14 +53,14 @@ public struct LastRollback: Codable, Equatable {
 /// The SDK's keys, `hotcodepush.<name>` each: three identity keys kept for the install's life,
 /// the rest a cache under `stateVersion` that is dropped and rebuilt when unreadable.
 public final class StateStore {
-    public static let stateVersion = 1
+    public static let stateVersion = 2
     static let prefix = "hotcodepush."
 
     private let store: KeyValueStore
 
     public init(store: KeyValueStore) {
         self.store = store
-        if readInt("stateVersion") != StateStore.stateVersion {
+        if store.integer(forKey: StateStore.prefix + "stateVersion") != StateStore.stateVersion {
             deleteCacheKeys()
         }
     }
@@ -157,7 +157,7 @@ public final class StateStore {
         for key in ["currentRelease", "nextRelease", "fallbackRelease", "failedBundleIds", "lastBuiltAt", "reportedAt", "acknowledgedReport", "lastCheck", "cachedIndex", "unsentEvents", "checkedReleaseIds", "lastRollback", "lastSyncAt"] {
             set(key, nil)
         }
-        set("stateVersion", String(StateStore.stateVersion))
+        store.set(StateStore.stateVersion, forKey: StateStore.prefix + "stateVersion")
     }
 
     // MARK: Plumbing
@@ -178,10 +178,6 @@ public final class StateStore {
             return
         }
         set(key, String(bytes: data, encoding: .utf8))
-    }
-
-    private func readInt(_ key: String) -> Int? {
-        return string(key).flatMap(Int.init)
     }
 
     private func string(_ key: String) -> String? {

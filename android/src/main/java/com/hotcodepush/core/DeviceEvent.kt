@@ -15,6 +15,8 @@ data class DeviceEvent(
     val packKind: String? = null,
     val fromReleaseId: String? = null,
     val toReleaseId: String? = null,
+    /** The app's `rollback({ reason })` on `REPORTED_BY_APP`: printable, at most 256 characters. */
+    val detail: String? = null,
 ) {
     fun toJson(): JSONObject = JSONObject()
         .put("type", type)
@@ -27,6 +29,7 @@ data class DeviceEvent(
         .putIfNotNull("packKind", packKind)
         .putIfNotNull("fromReleaseId", fromReleaseId)
         .putIfNotNull("toReleaseId", toReleaseId)
+        .putIfNotNull("detail", detail)
 
     companion object {
         fun checked(releaseId: String, status: SyncStatus, reason: SkippedReason? = null, condition: ConditionType? = null) =
@@ -39,7 +42,7 @@ data class DeviceEvent(
 
         fun confirmed(releaseId: String) = DeviceEvent("confirmed", releaseId = releaseId)
 
-        fun failed(releaseId: String, reason: String) = DeviceEvent("failed", releaseId = releaseId, reason = reason)
+        fun failed(releaseId: String, reason: String, detail: String? = null) = DeviceEvent("failed", releaseId = releaseId, reason = reason, detail = detail)
 
         fun rolledBack(fromReleaseId: String, toReleaseId: String?) = DeviceEvent("rolledBack", fromReleaseId = fromReleaseId, toReleaseId = toReleaseId)
 
@@ -54,6 +57,7 @@ data class DeviceEvent(
             packKind = json.optNullableString("packKind"),
             fromReleaseId = json.optNullableString("fromReleaseId"),
             toReleaseId = json.optNullableString("toReleaseId"),
+            detail = json.optNullableString("detail"),
         )
     }
 }

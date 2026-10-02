@@ -90,15 +90,15 @@ data class IndexRelease(
             id = json.getString("id", WireRule.IDENTIFIER),
             number = json.getInt("number"),
             createdAt = Iso8601.parse(json.getString("createdAt")),
-            isMandatory = json.optBoolean("isMandatory", false),
+            isMandatory = json.getBoolean("isMandatory"),
             notes = json.optNullableString("notes"),
-            rollout = json.optInt("rollout", 100),
-            conditions = json.optJSONArray("conditions").map { Condition.fromJson(it) },
+            rollout = json.getInt("rollout"),
+            conditions = json.getJSONArray("conditions").map { Condition.fromJson(it) },
             bundleId = json.getString("bundleId", WireRule.IDENTIFIER),
             bundleVersion = json.getString("bundleVersion"),
             manifestUrl = json.getString("manifestUrl"),
-            manifestSha256 = json.getString("manifestSha256"),
-            sizeBytes = json.optLong("sizeBytes", 0),
+            manifestSha256 = json.getString("manifestSha256", WireRule.SHA256),
+            sizeBytes = json.getLong("sizeBytes"),
         )
     }
 }

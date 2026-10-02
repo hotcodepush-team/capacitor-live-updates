@@ -1,12 +1,14 @@
 import { WebPlugin } from '@capacitor/core';
 
 import type {
+  ApplyResult,
   CheckResult,
+  DownloadResult,
   GetChannelResult,
   GetDeviceResult,
-  GetStatusResult,
+  GetStateResult,
   HotCodePushPlugin,
-  ReadyResult,
+  NotifyReadyResult,
   SyncResult,
 } from './definitions';
 
@@ -20,9 +22,17 @@ export class HotCodePushWeb extends WebPlugin implements HotCodePushPlugin {
     source: 'config',
   };
 
-  async apply(): Promise<void> {}
+  async applyUpdate(): Promise<ApplyResult> {
+    return { status: 'NOTHING_TO_APPLY', release: null };
+  }
 
-  async check(): Promise<CheckResult> {
+  async checkForUpdate(): Promise<CheckResult> {
+    return { status: 'UP_TO_DATE', release: null };
+  }
+
+  async clearUpdates(): Promise<void> {}
+
+  async downloadUpdate(): Promise<DownloadResult> {
     return { status: 'UP_TO_DATE', release: null };
   }
 
@@ -44,9 +54,7 @@ export class HotCodePushWeb extends WebPlugin implements HotCodePushPlugin {
     };
   }
 
-  async notifyRendered(): Promise<void> {}
-
-  async getStatus(): Promise<GetStatusResult> {
+  async getState(): Promise<GetStateResult> {
     return {
       currentRelease: null,
       embeddedBundleId: null,
@@ -59,11 +67,11 @@ export class HotCodePushWeb extends WebPlugin implements HotCodePushPlugin {
     };
   }
 
-  async ready(): Promise<ReadyResult> {
+  async notifyReady(): Promise<NotifyReadyResult> {
     return { currentRelease: null, isRolledBack: false, previousRelease: null };
   }
 
-  async reset(): Promise<void> {}
+  async notifyRendered(): Promise<void> {}
 
   async rollback(): Promise<void> {}
 
@@ -72,6 +80,8 @@ export class HotCodePushWeb extends WebPlugin implements HotCodePushPlugin {
   async setChannel(): Promise<void> {}
 
   async setRestartAllowed(): Promise<void> {}
+
+  async showDebugScreen(): Promise<void> {}
 
   async sync(): Promise<SyncResult> {
     return { status: 'UP_TO_DATE', release: null };

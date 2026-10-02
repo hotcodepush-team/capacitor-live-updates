@@ -48,11 +48,18 @@ class FakeHttpClient : HttpClient {
 
 class InMemoryStore : KeyValueStore {
     val values = mutableMapOf<String, String>()
+    val integers = mutableMapOf<String, Int>()
 
     override fun getString(key: String): String? = values[key]
 
     override fun putString(key: String, value: String?) {
         if (value == null) values.remove(key) else values[key] = value
+    }
+
+    override fun getInt(key: String): Int? = integers[key]
+
+    override fun putInt(key: String, value: Int?) {
+        if (value == null) integers.remove(key) else integers[key] = value
     }
 }
 
@@ -85,12 +92,14 @@ class FakeLoader(private val root: File) : BundleLoader {
 }
 
 class FakeListener : CoreListener {
-    val started = mutableListOf<SyncTrigger>()
-    val synced = mutableListOf<SyncResult>()
+    val available = mutableListOf<UpdateAvailableEvent>()
+    val downloaded = mutableListOf<UpdateDownloadedEvent>()
+    val failed = mutableListOf<UpdateFailedEvent>()
     val rolledBack = mutableListOf<RolledBackEvent>()
 
-    override fun syncStarted(trigger: SyncTrigger) { started += trigger }
-    override fun synced(result: SyncResult, trigger: SyncTrigger) { synced += result }
+    override fun updateAvailable(event: UpdateAvailableEvent) { available += event }
+    override fun updateDownloaded(event: UpdateDownloadedEvent) { downloaded += event }
+    override fun updateFailed(event: UpdateFailedEvent) { failed += event }
     override fun downloadProgress(releaseId: String, downloadedBytes: Long, totalBytes: Long) {}
     override fun rolledBack(event: RolledBackEvent) { rolledBack += event }
 }
@@ -140,13 +149,16 @@ object Fixture {
 
     fun embeddedManifest() = BundleManifest("embedded", APP_ID, "1.0.0", BUILT_AT, listOf(BundleManifest.File("index.html", Hashing.sha256Hex(embeddedIndexHtml), embeddedIndexHtml.size.toLong())), null, emptyList())
 
-    fun configuration(installStrategy: InstallStrategy = InstallStrategy.NEXT_START, autoSync: Boolean = false, readySignal: ReadySignal = ReadySignal.RENDER, publicKeys: List<String> = emptyList(), fingerprint: String? = "fp1:abc", builtAt: Long = BUILT_AT, enabledInDebugBuilds: Boolean = true): Configuration {
+    fun configuration(installStrategy: InstallStrategy = InstallStrategy.NEXT_START, mandatoryInstallStrategy: MandatoryInstallStrategy = MandatoryInstallStrategy.IMMEDIATE, downloadStrategy: DownloadStrategy = DownloadStrategy.AUTO, autoCheck: Boolean = false, readySignal: ReadySignal = ReadySignal.RENDER, publicKeys: List<String> = emptyList(), fingerprint: String? = "fp1:abc", builtAt: Long = BUILT_AT, enabledInDebugBuilds: Boolean = true): Configuration {
         val json = JSONObject()
             .put("appId", APP_ID)
             .put("channelId", CHANNEL_ID)
-            .put("autoSync", autoSync)
-            .put("syncInterval", 900)
+            .put("autoCheck", autoCheck)
+            .put("checkInterval", 900)
+            .put("downloadStrategy", downloadStrategy.wire)
             .put("installStrategy", installStrategy.wire)
+            .put("mandatoryInstallStrategy", mandatoryInstallStrategy.wire)
+            .put("installOnResumeAfter", 300)
             .put("readySignal", readySignal.wire)
             .put("readyTimeout", 10)
             .put("enabledInDebugBuilds", enabledInDebugBuilds)

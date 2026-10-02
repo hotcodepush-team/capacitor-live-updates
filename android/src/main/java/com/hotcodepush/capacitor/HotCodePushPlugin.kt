@@ -19,16 +19,21 @@ import com.hotcodepush.core.Configuration
 import com.hotcodepush.core.Core
 import com.hotcodepush.core.CoreListener
 import com.hotcodepush.core.DeviceFacts
+import com.hotcodepush.core.DownloadStrategy
 import com.hotcodepush.core.FileStore
 import com.hotcodepush.core.InstallStrategy
 import com.hotcodepush.core.KeyValueStore
-import com.hotcodepush.core.NetworkPolicy
+import com.hotcodepush.core.MandatoryInstallStrategy
 import com.hotcodepush.core.OkHttpClientAdapter
+import com.hotcodepush.core.PlainException
 import com.hotcodepush.core.RolledBackEvent
 import com.hotcodepush.core.ScheduledTask
 import com.hotcodepush.core.Scheduler
-import com.hotcodepush.core.SyncResult
+import com.hotcodepush.core.SyncOptions
 import com.hotcodepush.core.SyncTrigger
+import com.hotcodepush.core.UpdateAvailableEvent
+import com.hotcodepush.core.UpdateDownloadedEvent
+import com.hotcodepush.core.UpdateFailedEvent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -55,7 +60,7 @@ class HotCodePushPlugin : Plugin(), CoreListener {
         val core = Core(
             configuration = configuration,
             device = deviceFacts(context),
-            store = SharedPreferencesStore(context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)),
+            store = SharedPreferencesStore(context.getSharedPreferences(defaultPreferencesName(context), Context.MODE_PRIVATE)),
             files = FileStore(File(context.filesDir, "hotcodepush")),
             embedded = AssetsEmbeddedBundle(context, configuration.embeddedBundleManifest),
             http = OkHttpClientAdapter(),
@@ -106,10 +111,16 @@ class HotCodePushPlugin : Plugin(), CoreListener {
     }
 
     @PluginMethod
-    fun apply(call: PluginCall) = runVoid(call) { it.apply() }
+    fun applyUpdate(call: PluginCall) = run(call) { it.applyUpdate().toJson() }
 
     @PluginMethod
-    fun check(call: PluginCall) = run(call) { it.check().toJson() }
+    fun checkForUpdate(call: PluginCall) = run(call) { it.checkForUpdate().toJson() }
+
+    @PluginMethod
+    fun clearUpdates(call: PluginCall) = runVoid(call) { it.clearUpdates() }
+
+    @PluginMethod
+    fun downloadUpdate(call: PluginCall) = run(call) { it.downloadUpdate().toJson() }
 
     @PluginMethod
     fun getChannel(call: PluginCall) = run(call) { it.channel().toJson() }
@@ -118,16 +129,13 @@ class HotCodePushPlugin : Plugin(), CoreListener {
     fun getDevice(call: PluginCall) = run(call) { it.deviceResult().toJson() }
 
     @PluginMethod
-    fun getStatus(call: PluginCall) = run(call) { it.status().toJson() }
+    fun getState(call: PluginCall) = run(call) { it.getState().toJson() }
+
+    @PluginMethod
+    fun notifyReady(call: PluginCall) = run(call) { it.notifyReady().toJson() }
 
     @PluginMethod
     fun notifyRendered(call: PluginCall) = runVoid(call) { it.handleRendered() }
-
-    @PluginMethod
-    fun ready(call: PluginCall) = run(call) { it.ready().toJson() }
-
-    @PluginMethod
-    fun reset(call: PluginCall) = runVoid(call) { it.reset() }
 
     @PluginMethod
     fun rollback(call: PluginCall) {
@@ -168,11 +176,38 @@ class HotCodePushPlugin : Plugin(), CoreListener {
         runVoid(call) { it.setRestartAllowed(allowed) }
     }
 
+    /** The debug screen arrives with the shared native cores; until then the call resolves and shows nothing. */
+    @PluginMethod
+    fun showDebugScreen(call: PluginCall) {
+        if (core == null) {
+            call.reject(NOT_CONFIGURED_MESSAGE)
+            return
+        }
+        Logger.info(TAG, "The debug screen is not available yet.")
+        call.resolve()
+    }
+
     @PluginMethod
     fun sync(call: PluginCall) {
-        val installStrategy = InstallStrategy.fromWire(call.getString("installStrategy"))
-        val network = NetworkPolicy.fromWire(call.getString("network"))
-        run(call) { it.sync(SyncTrigger.CALL, installStrategy, network).toJson() }
+        val options = try {
+            syncOptions(call)
+        } catch (exception: PlainException) {
+            call.reject(exception.message)
+            return
+        }
+        run(call) { it.sync(SyncTrigger.MANUAL, options).toJson() }
+    }
+
+    /** Each stage's strategy for this call; a value outside its choices is a programming mistake and rejects the call. */
+    private fun syncOptions(call: PluginCall) = SyncOptions(
+        downloadStrategy = option("downloadStrategy", call.getString("downloadStrategy"), DownloadStrategy::fromWire),
+        installStrategy = option("installStrategy", call.getString("installStrategy"), InstallStrategy::fromWire),
+        mandatoryInstallStrategy = option("mandatoryInstallStrategy", call.getString("mandatoryInstallStrategy"), MandatoryInstallStrategy::fromWire),
+    )
+
+    private fun <T> option(name: String, raw: String?, parse: (String?) -> T?): T? {
+        if (raw == null) return null
+        return parse(raw) ?: throw PlainException("$name is not one of its choices: $raw")
     }
 
     private fun run(call: PluginCall, body: suspend (Core) -> JSONObject) {
@@ -208,12 +243,16 @@ class HotCodePushPlugin : Plugin(), CoreListener {
 
     // The listener
 
-    override fun syncStarted(trigger: SyncTrigger) {
-        notifyListeners("syncStarted", JSObject().put("trigger", trigger.wire))
+    override fun updateAvailable(event: UpdateAvailableEvent) {
+        notifyListeners("updateAvailable", JSObject.fromJSONObject(event.toJson()))
     }
 
-    override fun synced(result: SyncResult, trigger: SyncTrigger) {
-        notifyListeners("synced", JSObject().put("result", JSObject.fromJSONObject(result.toJson())).put("trigger", trigger.wire))
+    override fun updateDownloaded(event: UpdateDownloadedEvent) {
+        notifyListeners("updateDownloaded", JSObject.fromJSONObject(event.toJson()))
+    }
+
+    override fun updateFailed(event: UpdateFailedEvent) {
+        notifyListeners("updateFailed", JSObject.fromJSONObject(event.toJson()))
     }
 
     override fun downloadProgress(releaseId: String, downloadedBytes: Long, totalBytes: Long) {
@@ -221,6 +260,7 @@ class HotCodePushPlugin : Plugin(), CoreListener {
         notifyListeners("downloadProgress", JSObject().put("releaseId", releaseId).put("downloadedBytes", downloadedBytes).put("totalBytes", totalBytes).put("progress", progress))
     }
 
+    /** Retained until the reloaded web layer listens: the event belongs to the start that follows the rollback. */
     override fun rolledBack(event: RolledBackEvent) {
         notifyListeners("rolledBack", JSObject.fromJSONObject(event.toJson()), true)
     }
@@ -228,8 +268,10 @@ class HotCodePushPlugin : Plugin(), CoreListener {
     companion object {
         const val TAG = "HotCodePush"
         const val SDK_VERSION = "0.0.0"
-        const val PREFERENCES_NAME = "hotcodepush"
         const val NOT_CONFIGURED_MESSAGE = "HotCodePush is not configured: hotcodepush.json is missing from the app's assets. Run `npx hotcodepush init` and build the app once."
+
+        /** The default `SharedPreferences`, the file `PreferenceManager.getDefaultSharedPreferences` names, without the dependency. */
+        fun defaultPreferencesName(context: Context) = "${context.packageName}_preferences"
 
         fun readConfiguration(context: Context): Configuration? = try {
             context.assets.open("hotcodepush.json").bufferedReader().use { Configuration.decode(it.readText()) }
@@ -257,6 +299,12 @@ class SharedPreferencesStore(private val preferences: SharedPreferences) : KeyVa
 
     override fun putString(key: String, value: String?) {
         preferences.edit().apply { if (value == null) remove(key) else putString(key, value) }.apply()
+    }
+
+    override fun getInt(key: String): Int? = if (preferences.contains(key)) runCatching { preferences.getInt(key, 0) }.getOrNull() else null
+
+    override fun putInt(key: String, value: Int?) {
+        preferences.edit().apply { if (value == null) remove(key) else putInt(key, value) }.apply()
     }
 }
 

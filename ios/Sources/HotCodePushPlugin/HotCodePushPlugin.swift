@@ -13,18 +13,20 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "HotCodePushPlugin"
     public let jsName = "HotCodePush"
     public let pluginMethods: [CAPPluginMethod] = [
-        CAPPluginMethod(name: "apply", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "check", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "applyUpdate", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "checkForUpdate", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "clearUpdates", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "downloadUpdate", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getChannel", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getDevice", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "getStatus", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getState", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "notifyReady", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "notifyRendered", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "ready", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "reset", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "rollback", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setAttributes", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setChannel", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setRestartAllowed", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "showDebugScreen", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "sync", returnType: CAPPluginReturnPromise)
     ]
 
@@ -65,12 +67,20 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
 
     // MARK: Methods
 
-    @objc func apply(_ call: CAPPluginCall) {
-        runVoid(call) { core in await core.apply() }
+    @objc func applyUpdate(_ call: CAPPluginCall) {
+        run(call) { core in await core.applyUpdate() }
     }
 
-    @objc func check(_ call: CAPPluginCall) {
-        run(call) { core in await core.check() }
+    @objc func checkForUpdate(_ call: CAPPluginCall) {
+        run(call) { core in await core.checkForUpdate() }
+    }
+
+    @objc func clearUpdates(_ call: CAPPluginCall) {
+        runVoid(call) { core in await core.clearUpdates() }
+    }
+
+    @objc func downloadUpdate(_ call: CAPPluginCall) {
+        run(call) { core in await core.downloadUpdate() }
     }
 
     @objc func getChannel(_ call: CAPPluginCall) {
@@ -81,25 +91,21 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
         run(call) { core in await core.deviceResult() }
     }
 
-    @objc func getStatus(_ call: CAPPluginCall) {
-        run(call) { core in await core.status() }
+    @objc func getState(_ call: CAPPluginCall) {
+        run(call) { core in await core.getState() }
+    }
+
+    @objc func notifyReady(_ call: CAPPluginCall) {
+        run(call) { core in await core.notifyReady() }
     }
 
     @objc func notifyRendered(_ call: CAPPluginCall) {
         runVoid(call) { core in await core.handleRendered() }
     }
 
-    @objc func ready(_ call: CAPPluginCall) {
-        run(call) { core in await core.ready() }
-    }
-
-    @objc func reset(_ call: CAPPluginCall) {
-        runVoid(call) { core in await core.reset() }
-    }
-
     @objc func rollback(_ call: CAPPluginCall) {
         let reason = call.getString("reason")
-        runVoid(call) { core in await core.rollback(reason: reason) }
+        runVoid(call) { core in try await core.rollback(detail: reason) }
     }
 
     @objc func setAttributes(_ call: CAPPluginCall) {
@@ -138,10 +144,37 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
         runVoid(call) { core in await core.setRestartAllowed(allowed) }
     }
 
+    /// The debug screen arrives with the shared native cores; until then the call resolves and shows nothing.
+    @objc func showDebugScreen(_ call: CAPPluginCall) {
+        guard core != nil else {
+            call.reject(HotCodePushPlugin.notConfiguredMessage)
+            return
+        }
+        CAPLog.print("[HotCodePush] The debug screen is not available yet.")
+        call.resolve()
+    }
+
     @objc func sync(_ call: CAPPluginCall) {
-        let installStrategy = call.getString("installStrategy").flatMap(InstallStrategy.init(rawValue:))
-        let network = call.getString("network").flatMap(NetworkPolicy.init(rawValue:))
-        run(call) { core in await core.sync(trigger: .call, installStrategy: installStrategy, network: network) }
+        do {
+            let options = try HotCodePushPlugin.syncOptions(from: call)
+            run(call) { core in await core.sync(trigger: .manual, options: options) }
+        } catch {
+            call.reject(error.localizedDescription)
+        }
+    }
+
+    /// Each stage's strategy for this call; a value outside its choices is a programming mistake and rejects the call.
+    static func syncOptions(from call: CAPPluginCall) throws -> SyncOptions {
+        return SyncOptions(
+            downloadStrategy: try option("downloadStrategy", call.getString("downloadStrategy"), DownloadStrategy.init(rawValue:)),
+            installStrategy: try option("installStrategy", call.getString("installStrategy"), InstallStrategy.init(rawValue:)),
+            mandatoryInstallStrategy: try option("mandatoryInstallStrategy", call.getString("mandatoryInstallStrategy"), MandatoryInstallStrategy.init(rawValue:)))
+    }
+
+    private static func option<T>(_ name: String, _ raw: String?, _ parse: (String) -> T?) throws -> T? {
+        guard let raw = raw else { return nil }
+        guard let value = parse(raw) else { throw PlainError("\(name) is not one of its choices: \(raw)") }
+        return value
     }
 
     private func run<T: Encodable>(_ call: CAPPluginCall, _ body: @escaping (Core) async throws -> T) {
@@ -218,13 +251,16 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
 }
 
 extension HotCodePushPlugin: CoreListener {
-    public func syncStarted(trigger: SyncTrigger) {
-        notifyListeners("syncStarted", data: ["trigger": trigger.rawValue])
+    public func updateAvailable(_ event: UpdateAvailableEvent) {
+        notify("updateAvailable", event)
     }
 
-    public func synced(result: SyncResult, trigger: SyncTrigger) {
-        guard let js = try? HotCodePushPlugin.jsObject(result) else { return }
-        notifyListeners("synced", data: ["result": js, "trigger": trigger.rawValue])
+    public func updateDownloaded(_ event: UpdateDownloadedEvent) {
+        notify("updateDownloaded", event)
+    }
+
+    public func updateFailed(_ event: UpdateFailedEvent) {
+        notify("updateFailed", event)
     }
 
     public func downloadProgress(releaseId: String, downloadedBytes: Int, totalBytes: Int) {
@@ -232,9 +268,15 @@ extension HotCodePushPlugin: CoreListener {
         notifyListeners("downloadProgress", data: ["releaseId": releaseId, "downloadedBytes": downloadedBytes, "totalBytes": totalBytes, "progress": progress])
     }
 
+    /// Retained until the reloaded web layer listens: the event belongs to the start that follows the rollback.
     public func rolledBack(_ event: RolledBackEvent) {
         guard let js = try? HotCodePushPlugin.jsObject(event) else { return }
         notifyListeners("rolledBack", data: js, retainUntilConsumed: true)
+    }
+
+    private func notify<T: Encodable>(_ eventName: String, _ event: T) {
+        guard let js = try? HotCodePushPlugin.jsObject(event) else { return }
+        notifyListeners(eventName, data: js)
     }
 }
 #endif

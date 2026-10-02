@@ -80,7 +80,7 @@ public struct IndexRelease: Codable, Equatable {
         bundleId = try container.decode(.identifier, forKey: .bundleId)
         bundleVersion = try container.decode(String.self, forKey: .bundleVersion)
         manifestUrl = try container.decode(String.self, forKey: .manifestUrl)
-        manifestSha256 = try container.decode(String.self, forKey: .manifestSha256)
+        manifestSha256 = try container.decode(.sha256, forKey: .manifestSha256)
         sizeBytes = try container.decode(Int.self, forKey: .sizeBytes)
     }
 

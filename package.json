@@ -78,6 +78,6 @@
     "access": "public"
   },
   "dependencies": {
-    "@hotcodepush/protocol": "https://pkg.pr.new/hotcodepush-team/protocol-js/@hotcodepush/protocol@ce4a957425136a81a82e77590437dde01756cad9"
+    "@hotcodepush/protocol": "https://pkg.pr.new/hotcodepush-team/protocol-js/@hotcodepush/protocol@0b78d1b4200f6bfb34b7595e61a705a4ff6a8507"
   }
 }

@@ -27,6 +27,11 @@ final class WireTypesTests: XCTestCase {
         XCTAssertThrowsError(try decodeIndexRelease(id: "r1", bundleId: "../.."))
     }
 
+    func testShouldRefuseAnIndexReleaseWhoseManifestHashIsNotALowercaseSha256() {
+        XCTAssertThrowsError(try decodeIndexRelease(id: "r1", bundleId: "b1", manifestSha256: sha256.uppercased()))
+        XCTAssertThrowsError(try decodeIndexRelease(id: "r1", bundleId: "b1", manifestSha256: "../escape"))
+    }
+
     func testShouldAcceptTheIdsAndPathsTheApiWrites() throws {
         let bundleId = "0f8fad5b-d9cb-469f-a165-70867728950e"
         for path in ["index.html", "assets/index-a1b2c3.js", ".well-known/assetlinks.json", "assets/..hidden"] {
@@ -40,8 +45,8 @@ final class WireTypesTests: XCTestCase {
         return try Json.decoder.decode(BundleManifest.self, from: Json.encoder.encode(manifest))
     }
 
-    private func decodeIndexRelease(id: String, bundleId: String) throws -> IndexRelease {
-        let release = IndexRelease(id: id, number: 1, createdAt: Fixture.builtAt, bundleId: bundleId, bundleVersion: "1.0.0", manifestUrl: "\(Fixture.filesBaseUrl)/manifest.json", manifestSha256: sha256, sizeBytes: 7)
+    private func decodeIndexRelease(id: String, bundleId: String, manifestSha256: String? = nil) throws -> IndexRelease {
+        let release = IndexRelease(id: id, number: 1, createdAt: Fixture.builtAt, bundleId: bundleId, bundleVersion: "1.0.0", manifestUrl: "\(Fixture.filesBaseUrl)/manifest.json", manifestSha256: manifestSha256 ?? sha256, sizeBytes: 7)
         return try Json.decoder.decode(IndexRelease.self, from: Json.encoder.encode(release))
     }
 }

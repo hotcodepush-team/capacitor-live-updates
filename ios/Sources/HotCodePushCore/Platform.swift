@@ -31,13 +31,15 @@ public protocol BundleLoader: AnyObject {
     func loadServedBundle(bundleId: String?)
     /// The bundle the WebView runs right now, `nil` for the embedded bundle.
     func servedBundleId() -> String?
-    /// Whether the connection is metered or constrained, for the `unmetered` network policy.
+    /// Whether the connection is metered or constrained, for the `unmetered` download strategy.
     func isConnectionMetered() -> Bool
 }
 
+/// The five events, named by what happened to the update; a cycle's start and end fire nothing.
 public protocol CoreListener: AnyObject {
-    func syncStarted(trigger: SyncTrigger)
-    func synced(result: SyncResult, trigger: SyncTrigger)
+    func updateAvailable(_ event: UpdateAvailableEvent)
+    func updateDownloaded(_ event: UpdateDownloadedEvent)
+    func updateFailed(_ event: UpdateFailedEvent)
     func downloadProgress(releaseId: String, downloadedBytes: Int, totalBytes: Int)
     func rolledBack(_ event: RolledBackEvent)
 }
@@ -93,8 +95,13 @@ public enum AttributeRules {
         guard keyPattern.firstMatch(in: key, range: NSRange(key.startIndex..., in: key)) != nil else {
             throw PlainError("An attribute key is an identifier of letters, digits, '_', '-' and '.', at most 64 characters: \(key)")
         }
+        try validate(value: value)
+    }
+
+    /// The value rule alone, shared with the app's rollback reason.
+    public static func validate(value: String) throws {
         guard value.count <= 256, !value.unicodeScalars.contains(where: { $0.value < 0x20 || $0.value == 0x7F }) else {
-            throw PlainError("An attribute value is a printable string without control characters, at most 256 characters")
+            throw PlainError("A value is a printable string without control characters, at most 256 characters")
         }
     }
 }

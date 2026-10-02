@@ -1,7 +1,20 @@
 import Foundation
 
-/// The state machine every framework shares: three named releases, a readiness gate and one sync cycle.
+/// The state machine every framework shares: three named releases, a readiness gate and one cycle of three stages.
 public actor Core {
+    /// How far a cycle goes: the check alone, the download whatever the strategy says, or the whole sync.
+    enum Stage {
+        case check, download, sync
+    }
+
+    /// How a runtime channel name resolved.
+    enum ChannelResolution {
+        case id(String)
+        case offline
+        case unknown
+        case invalid(String)
+    }
+
     public let configuration: Configuration
     private let device: DeviceFacts
     private let state: StateStore
@@ -23,6 +36,8 @@ public actor Core {
     private var isSendingDeviceEvents = false
     private var backgroundedAt: Date?
     private var resolvedChannelName: (name: String, id: String)?
+    /// The rollback the next reload announces, once, before the gate.
+    private var pendingRollbackEvent: RolledBackEvent?
 
     public init(configuration: Configuration, device: DeviceFacts, store: KeyValueStore, files: FileStore, embedded: EmbeddedBundle, http: HttpClient, loader: BundleLoader, listener: CoreListener, scheduler: Scheduler = DispatchScheduler(), clock: Clock = SystemClock(), temporaryDirectory: URL = FileManager.default.temporaryDirectory) {
         self.configuration = configuration
@@ -47,20 +62,26 @@ public actor Core {
             dropStoredReleases()
         }
         if isCurrentReleaseUnconfirmed() {
-            rollbackCurrentRelease(reason: .crashed)
-            return
+            rollbackCurrentRelease(reason: .crashed, detail: nil)
         }
-        if let next = state.nextRelease, configuration.installStrategy == .nextStart || next.isMandatory || loader.servedBundleId() == next.bundleId {
+        if let next = state.nextRelease, shouldSwitchAtStart(to: next) {
             switchToNextRelease()
         }
         loadBundle()
         if isCurrentReleaseUnconfirmed() {
             startReadyTimer()
             isStartSyncPending = true
-        } else if configuration.autoSync {
+        } else if configuration.autoCheck {
             Task { await self.sync(trigger: .start) }
         }
         deleteUnusedFiles()
+    }
+
+    /// A mandatory release follows its own strategy, so one the app took over waits across starts; any other switches under `next-start`; a bundle the WebView already serves is adopted.
+    private func shouldSwitchAtStart(to next: Release) -> Bool {
+        if loader.servedBundleId() == next.bundleId { return true }
+        if next.isMandatory { return configuration.mandatoryInstallStrategy == .immediate }
+        return configuration.installStrategy == .nextStart
     }
 
     /// The first render, the readiness signal when `readySignal` is `render`.
@@ -69,78 +90,104 @@ public actor Core {
         confirmCurrentRelease()
     }
 
-    public func ready() -> ReadyResult {
+    /// Ends the gate when `readySignal` is `manual`, and tells the app whether this start follows a rollback.
+    public func notifyReady() -> NotifyReadyResult {
         confirmCurrentRelease()
         let rollback = state.lastRollback
         state.lastRollback = nil
-        return ReadyResult(currentRelease: state.currentRelease, previousRelease: rollback?.from, isRolledBack: rollback != nil, rollbackReason: rollback?.reason)
+        return NotifyReadyResult(currentRelease: state.currentRelease, previousRelease: rollback?.from, isRolledBack: rollback != nil, rollbackReason: rollback?.reason)
     }
 
-    /// The background: the interval timer stops, since interval syncs belong to the foreground, and the moment is kept for `on-resume`.
+    /// The background: the interval timer stops, since interval checks belong to the foreground, and the moment is kept for `next-resume`.
     public func handleAppPause() {
         backgroundedAt = clock.now
         intervalTimer?.cancel()
         intervalTimer = nil
     }
 
-    /// A resume installs an `on-resume` release after enough time in the background, else syncs when the interval has passed.
+    /// A resume installs a `next-resume` release after enough time in the background, else checks when the interval has passed.
     public func handleAppResume() {
         let backgroundDuration = backgroundedAt.map { clock.now.timeIntervalSince($0) }
         backgroundedAt = nil
-        if let duration = backgroundDuration, configuration.installStrategy == .onResume, state.nextRelease != nil, duration >= configuration.minimumBackgroundDuration {
+        if let duration = backgroundDuration, configuration.installStrategy == .nextResume, state.nextRelease != nil, duration >= configuration.installOnResumeAfter {
             installNextRelease()
             return
         }
-        guard configuration.autoSync else { return }
-        if let elapsed = state.lastSyncAt.map({ clock.now.timeIntervalSince($0) }), elapsed < configuration.syncInterval {
-            scheduleIntervalSync(after: configuration.syncInterval - elapsed)
+        guard configuration.autoCheck else { return }
+        if let elapsed = state.lastSyncAt.map({ clock.now.timeIntervalSince($0) }), elapsed < configuration.checkInterval {
+            scheduleIntervalSync(after: configuration.checkInterval - elapsed)
         } else {
             Task { await self.sync(trigger: .resume) }
         }
     }
 
-    // MARK: Sync
+    // MARK: The three stages
 
-    public func sync(trigger: SyncTrigger, installStrategy: InstallStrategy? = nil, network: NetworkPolicy? = nil) async -> SyncResult {
+    /// One full cycle; a second call while one runs joins the running one.
+    public func sync(trigger: SyncTrigger, options: SyncOptions = SyncOptions()) async -> SyncResult {
         if let running = runningSync {
             return await running.value
         }
-        let task = Task { await self.performSync(trigger: trigger, installStrategy: installStrategy, network: network, isCheckOnly: false) }
+        let task = Task { await self.performCycle(trigger: trigger, stage: .sync, options: options) }
         runningSync = task
         let result = await task.value
         runningSync = nil
         return result
     }
 
-    public func check() async -> SyncResult {
+    /// The first stage: fetch and evaluate, download nothing.
+    public func checkForUpdate() async -> SyncResult {
         if let running = runningSync {
             _ = await running.value
         }
-        return await performSync(trigger: .call, installStrategy: nil, network: nil, isCheckOnly: true)
+        return await performCycle(trigger: .manual, stage: .check, options: SyncOptions())
     }
 
-    private func performSync(trigger: SyncTrigger, installStrategy: InstallStrategy?, network: NetworkPolicy?, isCheckOnly: Bool) async -> SyncResult {
-        if !isCheckOnly {
-            listener.syncStarted(trigger: trigger)
+    /// The second stage: download and verify the update the check finds, whatever `downloadStrategy` says, then install per the strategies.
+    public func downloadUpdate() async -> SyncResult {
+        if let running = runningSync {
+            _ = await running.value
         }
-        let result = await resolveSync(installStrategy: installStrategy, network: network, isCheckOnly: isCheckOnly)
-        state.lastCheck = LastCheck(at: clock.now, trigger: trigger, result: result)
-        if !isCheckOnly {
+        return await performCycle(trigger: .manual, stage: .download, options: SyncOptions())
+    }
+
+    /// The third stage: apply the downloaded update now and reload the app.
+    public func applyUpdate() -> ApplyResult {
+        guard let next = state.nextRelease else {
+            return ApplyResult(status: .nothingToApply, release: state.currentRelease)
+        }
+        switchToNextRelease()
+        reloadApp()
+        return ApplyResult(status: .applied, release: next)
+    }
+
+    private func performCycle(trigger: SyncTrigger, stage: Stage, options: SyncOptions) async -> SyncResult {
+        let result = await resolveCycle(trigger: trigger, stage: stage, options: options)
+        if stage != .download {
+            state.lastCheck = LastCheck(at: clock.now, trigger: trigger, result: result)
+        }
+        if stage == .sync {
             state.lastSyncAt = clock.now
-            listener.synced(result: result, trigger: trigger)
-            scheduleIntervalSync(after: configuration.syncInterval)
+            scheduleIntervalSync(after: configuration.checkInterval)
+        }
+        if result.status == .failed, let reason = result.reason.flatMap(FailedReason.init(rawValue:)) {
+            listener.updateFailed(UpdateFailedEvent(release: result.release, reason: reason, message: result.message ?? "", trigger: trigger))
         }
         Task { await self.sendDeviceEvents() }
         return result
     }
 
-    private func resolveSync(installStrategy: InstallStrategy?, network: NetworkPolicy?, isCheckOnly: Bool) async -> SyncResult {
+    private func resolveCycle(trigger: SyncTrigger, stage: Stage, options: SyncOptions) async -> SyncResult {
         let current = state.currentRelease
         if isDisabledInThisBuild {
             return .skipped(current, reason: .debugBuild)
         }
-        guard let channelId = await resolveChannelId() else {
-            return .failed(current, reason: .unknownChannel, message: "The channel set at runtime is not in the app's channels index")
+        let channelId: String
+        switch await resolveChannelId() {
+        case .id(let id): channelId = id
+        case .offline: return .failed(current, reason: .offline, message: "The channels index could not be fetched to resolve the channel name")
+        case .unknown: return .failed(current, reason: .unknownChannel, message: "The channel set at runtime is not in the app's channels index")
+        case .invalid(let message): return .failed(current, reason: .invalidIndex, message: message)
         }
         let index: ChannelIndex
         switch await fetchChannelIndex(channelId: channelId) {
@@ -154,19 +201,16 @@ public actor Core {
             return .upToDate(current)
         case .available(let target, let isMandatory):
             recordChecked(target, in: index, status: .available, skip: nil)
-            if isCheckOnly {
-                return .available(target.release, notes: target.notes, downloadBytes: target.sizeBytes)
-            }
-            return await install(target, isMandatory: isMandatory, installStrategy: installStrategy, network: network)
+            return await update(to: target, isMandatory: isMandatory, trigger: trigger, stage: stage, options: options)
         case .skipped(let release, .releaseRevoked, _):
-            if isCheckOnly {
+            if stage == .check {
                 return .skipped(release?.release, reason: .releaseRevoked)
             }
             guard let target = release else {
                 revertToEmbedded()
                 return .skipped(nil, reason: .releaseRevoked)
             }
-            let outcome = await install(target, isMandatory: true, installStrategy: nil, network: network)
+            let outcome = await install(target, isMandatory: true, strategy: .immediate, trigger: trigger, stage: .sync, isDownloadForced: true)
             return outcome.status == .failed ? outcome : .skipped(target.release, reason: .releaseRevoked)
         case .skipped(let release, let reason, let condition):
             if let release = release {
@@ -176,21 +220,65 @@ public actor Core {
         }
     }
 
-    private func install(_ target: IndexRelease, isMandatory: Bool, installStrategy: InstallStrategy?, network: NetworkPolicy?) async -> SyncResult {
-        let release = target.release
-        if let current = state.currentRelease, current.bundleId == target.bundleId {
+    /// A release the device qualifies for: adopted in place when it carries the running bundle, else announced and taken as far as the stage goes.
+    private func update(to target: IndexRelease, isMandatory: Bool, trigger: SyncTrigger, stage: Stage, options: SyncOptions) async -> SyncResult {
+        let release = resolveRelease(target, isMandatory: isMandatory)
+        if stage != .check, let current = state.currentRelease, current.bundleId == target.bundleId {
             adoptInPlace(release)
-            return .updated(release, notes: target.notes, installAt: .now)
+            return .updated(release, notes: target.notes, installAt: .immediate)
         }
-        let strategy = isMandatory ? .immediate : (installStrategy ?? configuration.installStrategy)
-        if let next = state.nextRelease, next.bundleId == target.bundleId, let manifest = files.readManifest(bundleId: next.bundleId), files.isComplete(manifest, embedded: embedded) {
-            return applyDownloaded(release, notes: target.notes, strategy: strategy)
+        let strategy = resolveInstallStrategy(isMandatory: isMandatory, options: options)
+        if isDownloaded(target) {
+            if stage == .check {
+                return .available(release, notes: target.notes, downloadBytes: target.sizeBytes)
+            }
+            let outcome = applyDownloaded(release, notes: target.notes, strategy: strategy)
+            return stage == .download ? .downloaded(release, notes: target.notes) : outcome
         }
-        if (network ?? configuration.network) == .unmetered && loader.isConnectionMetered() {
-            return .skipped(release, reason: .meteredConnection)
+        listener.updateAvailable(UpdateAvailableEvent(release: release, notes: target.notes, downloadBytes: target.sizeBytes, trigger: trigger))
+        switch stage {
+        case .check:
+            return .available(release, notes: target.notes, downloadBytes: target.sizeBytes)
+        case .sync:
+            switch options.downloadStrategy ?? configuration.downloadStrategy {
+            case .manual:
+                return .available(release, notes: target.notes, downloadBytes: target.sizeBytes)
+            case .unmetered where loader.isConnectionMetered():
+                return .skipped(release, reason: .meteredConnection)
+            case .auto, .unmetered:
+                return await install(target, isMandatory: isMandatory, strategy: strategy, trigger: trigger, stage: stage, isDownloadForced: false)
+            }
+        case .download:
+            return await install(target, isMandatory: isMandatory, strategy: strategy, trigger: trigger, stage: stage, isDownloadForced: true)
         }
+    }
+
+    /// The release as the app sees it: the index's entry with the mandatory flag the evaluation decided, transitive included.
+    private func resolveRelease(_ target: IndexRelease, isMandatory: Bool) -> Release {
+        return Release(id: target.id, number: target.number, bundleId: target.bundleId, bundleVersion: target.bundleVersion, isMandatory: isMandatory)
+    }
+
+    /// A mandatory release follows `mandatoryInstallStrategy`; any other the install strategy.
+    private func resolveInstallStrategy(isMandatory: Bool, options: SyncOptions) -> InstallStrategy {
+        if isMandatory {
+            switch options.mandatoryInstallStrategy ?? configuration.mandatoryInstallStrategy {
+            case .immediate: return .immediate
+            case .manual: return .manual
+            }
+        }
+        return options.installStrategy ?? configuration.installStrategy
+    }
+
+    private func isDownloaded(_ target: IndexRelease) -> Bool {
+        guard let next = state.nextRelease, next.bundleId == target.bundleId, let manifest = files.readManifest(bundleId: next.bundleId) else { return false }
+        return files.isComplete(manifest, embedded: embedded)
+    }
+
+    private func install(_ target: IndexRelease, isMandatory: Bool, strategy: InstallStrategy, trigger: SyncTrigger, stage: Stage, isDownloadForced: Bool) async -> SyncResult {
+        let release = resolveRelease(target, isMandatory: isMandatory)
         do {
-            let outcome = try await downloader.downloadRelease(target, currentBundleId: state.currentRelease?.bundleId) { [listener] downloaded, total in
+            let baseBundleId = state.currentRelease?.bundleId ?? configuration.embeddedBundleId
+            let outcome = try await downloader.downloadRelease(target, currentBundleId: baseBundleId) { [listener] downloaded, total in
                 listener.downloadProgress(releaseId: target.id, downloadedBytes: downloaded, totalBytes: total)
             }
             try BundleProjection.project(outcome.manifest, from: files, embedded: embedded, into: loader.projectionDirectory(bundleId: target.bundleId))
@@ -202,7 +290,11 @@ public actor Core {
             enqueueDeviceEvent(.failed(releaseId: target.id, reason: FailedReason.downloadFailed.rawValue))
             return .failed(release, reason: .downloadFailed, message: error.localizedDescription)
         }
-        return applyDownloaded(release, notes: target.notes, strategy: strategy)
+        if strategy != .immediate {
+            listener.updateDownloaded(UpdateDownloadedEvent(release: release, installAt: strategy, trigger: trigger))
+        }
+        let outcome = applyDownloaded(release, notes: target.notes, strategy: strategy)
+        return stage == .download ? .downloaded(release, notes: target.notes) : outcome
     }
 
     /// Choosing and applying are two acts: the strategy is a policy over the four functions.
@@ -211,29 +303,25 @@ public actor Core {
         switch strategy {
         case .immediate:
             installNextRelease()
-            return .updated(release, notes: notes, installAt: .now)
         case .nextStart:
             loader.persistServedBundle(bundleId: release.bundleId)
-            return .updated(release, notes: notes, installAt: .nextStart)
-        case .onResume:
-            return .updated(release, notes: notes, installAt: .onResume)
-        case .manual:
-            return .updated(release, notes: notes, installAt: .manual)
+        case .nextResume, .manual:
+            break
         }
+        return .updated(release, notes: notes, installAt: strategy)
     }
 
-    public func apply() {
-        guard state.nextRelease != nil else { return }
-        switchToNextRelease()
-        reloadApp()
-    }
-
-    public func rollback(reason: String?) {
+    /// Rolls the running release back now; `detail` is the app's own cause, carried on the failure event.
+    public func rollback(detail: String?) throws {
+        if let detail = detail {
+            try AttributeRules.validate(value: detail)
+        }
         guard state.currentRelease != nil else { return }
-        rollbackCurrentRelease(reason: .reportedByApp)
+        rollbackCurrentRelease(reason: .reportedByApp, detail: detail)
     }
 
-    public func reset() {
+    /// Back to the embedded bundle: every downloaded update and the failed list go, the identity stays.
+    public func clearUpdates() {
         stopReadyTimer()
         state.currentRelease = nil
         state.nextRelease = nil
@@ -257,8 +345,8 @@ public actor Core {
 
     // MARK: State
 
-    public func status() -> StatusResult {
-        return StatusResult(
+    public func getState() -> StateResult {
+        return StateResult(
             currentRelease: state.currentRelease,
             nextRelease: state.nextRelease,
             fallbackRelease: state.fallbackRelease,
@@ -335,8 +423,13 @@ public actor Core {
         }
     }
 
+    /// The restart of the web layer: the bundle loads, a rollback this start follows is announced once, then the gate runs.
     private func reloadApp() {
         loader.loadServedBundle(bundleId: state.currentRelease?.bundleId)
+        if let event = pendingRollbackEvent {
+            pendingRollbackEvent = nil
+            listener.rolledBack(event)
+        }
         if isCurrentReleaseUnconfirmed() {
             startReadyTimer()
         }
@@ -381,13 +474,13 @@ public actor Core {
         }
         if isStartSyncPending {
             isStartSyncPending = false
-            if configuration.autoSync {
+            if configuration.autoCheck {
                 Task { await self.sync(trigger: .start) }
             }
         }
     }
 
-    private func rollbackCurrentRelease(reason: RollbackReason) {
+    private func rollbackCurrentRelease(reason: RollbackReason, detail: String?) {
         guard let current = state.currentRelease else { return }
         stopReadyTimer()
         state.failedBundleIds = Array(Set(state.failedBundleIds + [current.bundleId])).sorted()
@@ -395,10 +488,10 @@ public actor Core {
         state.currentRelease = fallback
         state.nextRelease = nil
         state.lastRollback = LastRollback(from: current, to: fallback, reason: reason)
-        enqueueDeviceEvent(.failed(releaseId: current.id, reason: reason.rawValue))
+        pendingRollbackEvent = RolledBackEvent(from: current, to: fallback, reason: reason)
+        enqueueDeviceEvent(.failed(releaseId: current.id, reason: reason.rawValue, detail: detail))
         enqueueDeviceEvent(.rolledBack(fromReleaseId: current.id, toReleaseId: fallback?.id))
         loader.persistServedBundle(bundleId: fallback?.bundleId)
-        listener.rolledBack(RolledBackEvent(from: current, to: fallback, reason: reason))
         if reason == .reportedByApp {
             reloadApp()
         } else {
@@ -441,12 +534,12 @@ public actor Core {
 
     func handleReadyTimeout() {
         guard isCurrentReleaseUnconfirmed() else { return }
-        rollbackCurrentRelease(reason: .readyTimeout)
+        rollbackCurrentRelease(reason: .readyTimeout, detail: nil)
     }
 
     private func scheduleIntervalSync(after seconds: TimeInterval) {
         intervalTimer?.cancel()
-        guard configuration.autoSync else { return }
+        guard configuration.autoCheck else { return }
         intervalTimer = scheduler.schedule(after: seconds) { [weak self] in
             guard let self = self else { return }
             Task { await self.sync(trigger: .interval) }
@@ -471,18 +564,30 @@ public actor Core {
         case absent
     }
 
-    private func resolveChannelId() async -> String? {
+    /// The runtime choice, then the configured id; a name resolves through the channels index, offline being offline and not an unknown name.
+    private func resolveChannelId() async -> ChannelResolution {
         switch state.channel {
-        case nil: return configuration.channelId
-        case .id(let id): return id
+        case nil: return .id(configuration.channelId)
+        case .id(let id): return .id(id)
         case .name(let name):
-            if let resolved = resolvedChannelName, resolved.name == name { return resolved.id }
-            guard let url = URL(string: "\(configuration.filesBaseUrl)/apps/\(configuration.appId)/channels/v1/index.json"),
-                  let response = try? await http.get(url, headers: [:]), response.status == 200,
-                  let index = try? Json.decoder.decode(ChannelsIndex.self, from: response.body),
-                  let entry = index.channels.first(where: { $0.name == name }) else { return nil }
-            resolvedChannelName = (name, entry.id)
-            return entry.id
+            if let resolved = resolvedChannelName, resolved.name == name { return .id(resolved.id) }
+            guard let url = URL(string: "\(configuration.filesBaseUrl)/apps/\(configuration.appId)/channels/v1/index.json") else {
+                return .invalid("Invalid channels index URL")
+            }
+            guard let response = try? await http.get(url, headers: [:]) else { return .offline }
+            switch response.status {
+            case 200:
+                guard let index = try? Json.decoder.decode(ChannelsIndex.self, from: response.body) else {
+                    return .invalid("The channels index could not be parsed")
+                }
+                guard let entry = index.channels.first(where: { $0.name == name }) else { return .unknown }
+                resolvedChannelName = (name, entry.id)
+                return .id(entry.id)
+            case 404:
+                return .unknown
+            default:
+                return .offline
+            }
         }
     }
 

@@ -8,7 +8,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.File
 
-/** The state machine every framework shares: three named releases, a readiness gate and one sync cycle. */
+/** The state machine every framework shares: three named releases, a readiness gate and one cycle of three stages. */
 class Core(
     val configuration: Configuration,
     private val device: DeviceFacts,
@@ -23,6 +23,17 @@ class Core(
     private val scope: CoroutineScope,
     temporaryDirectory: File,
 ) {
+    /** How far a cycle goes: the check alone, the download whatever the strategy says, or the whole sync. */
+    private enum class Stage { CHECK, DOWNLOAD, SYNC }
+
+    /** How a runtime channel name resolved. */
+    private sealed class ChannelResolution {
+        data class Id(val id: String) : ChannelResolution()
+        object Offline : ChannelResolution()
+        object Unknown : ChannelResolution()
+        data class Invalid(val message: String) : ChannelResolution()
+    }
+
     private val state = StateStore(store)
     private val downloader = Downloader(configuration, files, embedded, http, temporaryDirectory)
     private val httpClient = http
@@ -38,26 +49,33 @@ class Core(
     private var backgroundedAt: Long? = null
     private var resolvedChannelName: Pair<String, String>? = null
 
+    /** The rollback the next reload announces, once, before the gate. */
+    private var pendingRollbackEvent: RolledBackEvent? = null
+
     // Lifecycle
 
     /** The start of a run: the binary's floor, the files on disk, the previous run's verdict, the pending switch, the gate, then the cleanup. */
     suspend fun handleAppStart() = lock.withLock {
         state.lastRollback = null
         if (state.lastBuiltAt != configuration.builtAt || hasReleaseWithoutManifest()) dropStoredReleases()
-        if (isCurrentReleaseUnconfirmed()) {
-            rollbackCurrentRelease(RollbackReason.CRASHED)
-            return
-        }
+        if (isCurrentReleaseUnconfirmed()) rollbackCurrentRelease(RollbackReason.CRASHED, null)
         val next = state.nextRelease
-        if (next != null && (configuration.installStrategy == InstallStrategy.NEXT_START || next.isMandatory || loader.servedBundleId() == next.bundleId)) switchToNextRelease()
+        if (next != null && shouldSwitchAtStart(next)) switchToNextRelease()
         loadBundle()
         if (isCurrentReleaseUnconfirmed()) {
             startReadyTimer()
             isStartSyncPending = true
-        } else if (configuration.autoSync) {
+        } else if (configuration.autoCheck) {
             scope.launch { sync(SyncTrigger.START) }
         }
         deleteUnusedFiles()
+    }
+
+    /** A mandatory release follows its own strategy, so one the app took over waits across starts; any other switches under `next-start`; a bundle the WebView already serves is adopted. */
+    private fun shouldSwitchAtStart(next: Release): Boolean = when {
+        loader.servedBundleId() == next.bundleId -> true
+        next.isMandatory -> configuration.mandatoryInstallStrategy == MandatoryInstallStrategy.IMMEDIATE
+        else -> configuration.installStrategy == InstallStrategy.NEXT_START
     }
 
     /** The first render, the readiness signal when `readySignal` is `render`. */
@@ -65,72 +83,96 @@ class Core(
         if (configuration.readySignal == ReadySignal.RENDER) confirmCurrentRelease()
     }
 
-    suspend fun ready(): ReadyResult = lock.withLock {
+    /** Ends the gate when `readySignal` is `manual`, and tells the app whether this start follows a rollback. */
+    suspend fun notifyReady(): NotifyReadyResult = lock.withLock {
         confirmCurrentRelease()
         val rollback = state.lastRollback
         state.lastRollback = null
-        ReadyResult(state.currentRelease, rollback?.from, rollback != null, rollback?.reason)
+        NotifyReadyResult(state.currentRelease, rollback?.from, rollback != null, rollback?.reason)
     }
 
-    /** The background: the interval timer stops, since interval syncs belong to the foreground, and the moment is kept for `on-resume`. */
+    /** The background: the interval timer stops, since interval checks belong to the foreground, and the moment is kept for `next-resume`. */
     suspend fun handleAppPause() = lock.withLock {
         backgroundedAt = clock.now()
         intervalTimer?.cancel()
         intervalTimer = null
     }
 
-    /** A resume installs an `on-resume` release after enough time in the background, else syncs when the interval has passed. */
+    /** A resume installs a `next-resume` release after enough time in the background, else checks when the interval has passed. */
     suspend fun handleAppResume() = lock.withLock {
         val backgroundDuration = backgroundedAt?.let { (clock.now() - it) / 1000.0 }
         backgroundedAt = null
-        if (backgroundDuration != null && configuration.installStrategy == InstallStrategy.ON_RESUME && state.nextRelease != null && backgroundDuration >= configuration.minimumBackgroundDuration) {
+        if (backgroundDuration != null && configuration.installStrategy == InstallStrategy.NEXT_RESUME && state.nextRelease != null && backgroundDuration >= configuration.installOnResumeAfter) {
             installNextRelease()
             return
         }
-        if (!configuration.autoSync) return
+        if (!configuration.autoCheck) return
         val elapsedSeconds = state.lastSyncAt?.let { (clock.now() - it) / 1000.0 }
-        if (elapsedSeconds == null || elapsedSeconds >= configuration.syncInterval) {
+        if (elapsedSeconds == null || elapsedSeconds >= configuration.checkInterval) {
             scope.launch { sync(SyncTrigger.RESUME) }
             return
         }
-        scheduleIntervalSync(configuration.syncInterval - elapsedSeconds)
+        scheduleIntervalSync(configuration.checkInterval - elapsedSeconds)
     }
 
-    // Sync
+    // The three stages
 
-    suspend fun sync(trigger: SyncTrigger, installStrategy: InstallStrategy? = null, network: NetworkPolicy? = null): SyncResult {
+    /** One full cycle; a second call while one runs joins the running one. */
+    suspend fun sync(trigger: SyncTrigger, options: SyncOptions = SyncOptions()): SyncResult {
         val running = lock.withLock {
-            runningSync ?: scope.async { performSync(trigger, installStrategy, network, isCheckOnly = false) }.also { runningSync = it }
+            runningSync ?: scope.async { performCycle(trigger, Stage.SYNC, options) }.also { runningSync = it }
         }
         val result = running.await()
         lock.withLock { if (runningSync === running) runningSync = null }
         return result
     }
 
-    suspend fun check(): SyncResult {
+    /** The first stage: fetch and evaluate, download nothing. */
+    suspend fun checkForUpdate(): SyncResult {
         lock.withLock { runningSync }?.await()
-        return performSync(SyncTrigger.CALL, null, null, isCheckOnly = true)
+        return performCycle(SyncTrigger.MANUAL, Stage.CHECK, SyncOptions())
     }
 
-    private suspend fun performSync(trigger: SyncTrigger, installStrategy: InstallStrategy?, network: NetworkPolicy?, isCheckOnly: Boolean): SyncResult {
-        if (!isCheckOnly) listener.syncStarted(trigger)
-        val result = resolveSync(installStrategy, network, isCheckOnly)
+    /** The second stage: download and verify the update the check finds, whatever `downloadStrategy` says, then install per the strategies. */
+    suspend fun downloadUpdate(): SyncResult {
+        lock.withLock { runningSync }?.await()
+        return performCycle(SyncTrigger.MANUAL, Stage.DOWNLOAD, SyncOptions())
+    }
+
+    /** The third stage: apply the downloaded update now and reload the app. */
+    suspend fun applyUpdate(): ApplyResult = lock.withLock {
+        val next = state.nextRelease ?: return ApplyResult(ApplyStatus.NOTHING_TO_APPLY, state.currentRelease)
+        switchToNextRelease()
+        reloadApp()
+        ApplyResult(ApplyStatus.APPLIED, next)
+    }
+
+    private suspend fun performCycle(trigger: SyncTrigger, stage: Stage, options: SyncOptions): SyncResult {
+        val result = resolveCycle(trigger, stage, options)
         lock.withLock {
-            state.lastCheck = LastCheck(clock.now(), trigger, result)
-            if (!isCheckOnly) {
+            if (stage != Stage.DOWNLOAD) state.lastCheck = LastCheck(clock.now(), trigger, result)
+            if (stage == Stage.SYNC) {
                 state.lastSyncAt = clock.now()
-                scheduleIntervalSync(configuration.syncInterval)
+                scheduleIntervalSync(configuration.checkInterval)
             }
         }
-        if (!isCheckOnly) listener.synced(result, trigger)
+        if (result.status == SyncStatus.FAILED) {
+            val reason = result.reason?.let { name -> FailedReason.entries.firstOrNull { it.name == name } }
+            if (reason != null) listener.updateFailed(UpdateFailedEvent(result.release, reason, result.message ?: "", trigger))
+        }
         scope.launch { sendDeviceEvents() }
         return result
     }
 
-    private suspend fun resolveSync(installStrategy: InstallStrategy?, network: NetworkPolicy?, isCheckOnly: Boolean): SyncResult {
+    private suspend fun resolveCycle(trigger: SyncTrigger, stage: Stage, options: SyncOptions): SyncResult {
         val current = state.currentRelease
         if (isDisabledInThisBuild) return SyncResult.skipped(current, SkippedReason.DEBUG_BUILD)
-        val channelId = resolveChannelId() ?: return SyncResult.failed(current, FailedReason.UNKNOWN_CHANNEL, "The channel set at runtime is not in the app's channels index")
+        val channelId = when (val resolution = resolveChannelId()) {
+            is ChannelResolution.Id -> resolution.id
+            ChannelResolution.Offline -> return SyncResult.failed(current, FailedReason.OFFLINE, "The channels index could not be fetched to resolve the channel name")
+            ChannelResolution.Unknown -> return SyncResult.failed(current, FailedReason.UNKNOWN_CHANNEL, "The channel set at runtime is not in the app's channels index")
+            is ChannelResolution.Invalid -> return SyncResult.failed(current, FailedReason.INVALID_INDEX, resolution.message)
+        }
         val index = when (val fetch = fetchChannelIndex(channelId)) {
             is IndexFetch.Index -> fetch.index
             IndexFetch.Offline -> return SyncResult.failed(current, FailedReason.OFFLINE, "The channel index could not be fetched and no cached copy exists")
@@ -141,43 +183,78 @@ class Core(
             is Evaluation.UpToDate -> SyncResult.upToDate(current)
             is Evaluation.Available -> {
                 lock.withLock { recordChecked(evaluation.release, index, SyncStatus.AVAILABLE, null) }
-                if (isCheckOnly) SyncResult.available(evaluation.release.release, evaluation.release.notes, evaluation.release.sizeBytes)
-                else install(evaluation.release, evaluation.isMandatory, installStrategy, network)
+                update(evaluation.release, evaluation.isMandatory, trigger, stage, options)
             }
             is Evaluation.Skipped -> when {
                 evaluation.reason != SkippedReason.RELEASE_REVOKED -> {
                     evaluation.release?.let { release -> lock.withLock { recordChecked(release, index, SyncStatus.SKIPPED, Skip(evaluation.reason, evaluation.condition)) } }
                     SyncResult.skipped(evaluation.release?.release, evaluation.reason, evaluation.condition)
                 }
-                isCheckOnly -> SyncResult.skipped(evaluation.release?.release, SkippedReason.RELEASE_REVOKED)
+                stage == Stage.CHECK -> SyncResult.skipped(evaluation.release?.release, SkippedReason.RELEASE_REVOKED)
                 evaluation.release == null -> {
                     lock.withLock { revertToEmbedded() }
                     SyncResult.skipped(null, SkippedReason.RELEASE_REVOKED)
                 }
                 else -> {
-                    val outcome = install(evaluation.release, true, null, network)
+                    val outcome = install(evaluation.release, true, InstallStrategy.IMMEDIATE, trigger, Stage.SYNC)
                     if (outcome.status == SyncStatus.FAILED) outcome else SyncResult.skipped(evaluation.release.release, SkippedReason.RELEASE_REVOKED)
                 }
             }
         }
     }
 
-    private suspend fun install(target: IndexRelease, isMandatory: Boolean, installStrategy: InstallStrategy?, network: NetworkPolicy?): SyncResult {
-        val release = target.release
+    /** A release the device qualifies for: adopted in place when it carries the running bundle, else announced and taken as far as the stage goes. */
+    private suspend fun update(target: IndexRelease, isMandatory: Boolean, trigger: SyncTrigger, stage: Stage, options: SyncOptions): SyncResult {
+        val release = resolveRelease(target, isMandatory)
         val current = state.currentRelease
-        if (current != null && current.bundleId == target.bundleId) {
+        if (stage != Stage.CHECK && current != null && current.bundleId == target.bundleId) {
             lock.withLock { adoptInPlace(release) }
-            return SyncResult.updated(release, target.notes, InstallMoment.NOW)
+            return SyncResult.updated(release, target.notes, InstallMoment.IMMEDIATE)
         }
-        val strategy = if (isMandatory) InstallStrategy.IMMEDIATE else installStrategy ?: configuration.installStrategy
-        val next = state.nextRelease
-        if (next != null && next.bundleId == target.bundleId) {
-            val manifest = files.readManifest(next.bundleId)
-            if (manifest != null && files.isComplete(manifest, embedded)) return lock.withLock { applyDownloaded(release, target.notes, strategy) }
+        val strategy = resolveInstallStrategy(isMandatory, options)
+        if (isDownloaded(target)) {
+            if (stage == Stage.CHECK) return SyncResult.available(release, target.notes, target.sizeBytes)
+            val outcome = lock.withLock { applyDownloaded(release, target.notes, strategy) }
+            return if (stage == Stage.DOWNLOAD) SyncResult.downloaded(release, target.notes) else outcome
         }
-        if ((network ?: configuration.network) == NetworkPolicy.UNMETERED && loader.isConnectionMetered()) return SyncResult.skipped(release, SkippedReason.METERED_CONNECTION)
+        listener.updateAvailable(UpdateAvailableEvent(release, target.notes, target.sizeBytes, trigger))
+        return when (stage) {
+            Stage.CHECK -> SyncResult.available(release, target.notes, target.sizeBytes)
+            Stage.SYNC -> when (options.downloadStrategy ?: configuration.downloadStrategy) {
+                DownloadStrategy.MANUAL -> SyncResult.available(release, target.notes, target.sizeBytes)
+                DownloadStrategy.UNMETERED -> if (loader.isConnectionMetered()) SyncResult.skipped(release, SkippedReason.METERED_CONNECTION) else install(target, isMandatory, strategy, trigger, stage)
+                DownloadStrategy.AUTO -> install(target, isMandatory, strategy, trigger, stage)
+            }
+            Stage.DOWNLOAD -> install(target, isMandatory, strategy, trigger, stage)
+        }
+    }
+
+    /** The release as the app sees it: the index's entry with the mandatory flag the evaluation decided, transitive included. */
+    private fun resolveRelease(target: IndexRelease, isMandatory: Boolean) = Release(target.id, target.number, target.bundleId, target.bundleVersion, isMandatory)
+
+    /** A mandatory release follows `mandatoryInstallStrategy`; any other the install strategy. */
+    private fun resolveInstallStrategy(isMandatory: Boolean, options: SyncOptions): InstallStrategy {
+        if (isMandatory) {
+            return when (options.mandatoryInstallStrategy ?: configuration.mandatoryInstallStrategy) {
+                MandatoryInstallStrategy.IMMEDIATE -> InstallStrategy.IMMEDIATE
+                MandatoryInstallStrategy.MANUAL -> InstallStrategy.MANUAL
+            }
+        }
+        return options.installStrategy ?: configuration.installStrategy
+    }
+
+    private fun isDownloaded(target: IndexRelease): Boolean {
+        val next = state.nextRelease ?: return false
+        if (next.bundleId != target.bundleId) return false
+        val manifest = files.readManifest(next.bundleId) ?: return false
+        return files.isComplete(manifest, embedded)
+    }
+
+    private suspend fun install(target: IndexRelease, isMandatory: Boolean, strategy: InstallStrategy, trigger: SyncTrigger, stage: Stage): SyncResult {
+        val release = resolveRelease(target, isMandatory)
         try {
-            val outcome = downloader.downloadRelease(target, current?.bundleId) { downloaded, total -> listener.downloadProgress(target.id, downloaded, total) }
+            val baseBundleId = state.currentRelease?.bundleId ?: configuration.embeddedBundleId
+            val outcome = downloader.downloadRelease(target, baseBundleId) { downloaded, total -> listener.downloadProgress(target.id, downloaded, total) }
             BundleProjection.project(outcome.manifest, files, embedded, loader.projectionDirectory(target.bundleId))
             lock.withLock { enqueueDeviceEvent(DeviceEvent.downloaded(target.id, target.bundleId, outcome.bytes, outcome.packKind)) }
         } catch (failure: DownloadFailure) {
@@ -187,37 +264,30 @@ class Core(
             lock.withLock { enqueueDeviceEvent(DeviceEvent.failed(target.id, FailedReason.DOWNLOAD_FAILED.name)) }
             return SyncResult.failed(release, FailedReason.DOWNLOAD_FAILED, exception.message ?: "")
         }
-        return lock.withLock { applyDownloaded(release, target.notes, strategy) }
+        if (strategy != InstallStrategy.IMMEDIATE) listener.updateDownloaded(UpdateDownloadedEvent(release, strategy, trigger))
+        val outcome = lock.withLock { applyDownloaded(release, target.notes, strategy) }
+        return if (stage == Stage.DOWNLOAD) SyncResult.downloaded(release, target.notes) else outcome
     }
 
     /** Choosing and applying are two acts: the strategy is a policy over the four functions. */
     private fun applyDownloaded(release: Release, notes: String?, strategy: InstallStrategy): SyncResult {
         setNextRelease(release)
-        return when (strategy) {
-            InstallStrategy.IMMEDIATE -> {
-                installNextRelease()
-                SyncResult.updated(release, notes, InstallMoment.NOW)
-            }
-            InstallStrategy.NEXT_START -> {
-                loader.persistServedBundle(release.bundleId)
-                SyncResult.updated(release, notes, InstallMoment.NEXT_START)
-            }
-            InstallStrategy.ON_RESUME -> SyncResult.updated(release, notes, InstallMoment.ON_RESUME)
-            InstallStrategy.MANUAL -> SyncResult.updated(release, notes, InstallMoment.MANUAL)
+        when (strategy) {
+            InstallStrategy.IMMEDIATE -> installNextRelease()
+            InstallStrategy.NEXT_START -> loader.persistServedBundle(release.bundleId)
+            InstallStrategy.NEXT_RESUME, InstallStrategy.MANUAL -> Unit
         }
+        return SyncResult.updated(release, notes, strategy)
     }
 
-    suspend fun apply() = lock.withLock {
-        if (state.nextRelease == null) return
-        switchToNextRelease()
-        reloadApp()
+    /** Rolls the running release back now; `detail` is the app's own cause, carried on the failure event. */
+    suspend fun rollback(detail: String?) = lock.withLock {
+        if (detail != null) AttributeRules.validate(detail)
+        if (state.currentRelease != null) rollbackCurrentRelease(RollbackReason.REPORTED_BY_APP, detail)
     }
 
-    suspend fun rollback(reason: String?) = lock.withLock {
-        if (state.currentRelease != null) rollbackCurrentRelease(RollbackReason.REPORTED_BY_APP)
-    }
-
-    suspend fun reset() = lock.withLock {
+    /** Back to the embedded bundle: every downloaded update and the failed list go, the identity stays. */
+    suspend fun clearUpdates() = lock.withLock {
         stopReadyTimer()
         state.currentRelease = null
         state.nextRelease = null
@@ -240,9 +310,9 @@ class Core(
 
     // State
 
-    fun status(): StatusResult {
+    fun getState(): StateResult {
         val cached = state.cachedIndex
-        return StatusResult(
+        return StateResult(
             currentRelease = state.currentRelease,
             nextRelease = state.nextRelease,
             fallbackRelease = state.fallbackRelease,
@@ -313,8 +383,13 @@ class Core(
         if (loader.servedBundleId() != expected) loader.loadServedBundle(expected)
     }
 
+    /** The restart of the web layer: the bundle loads, a rollback this start follows is announced once, then the gate runs. */
     private fun reloadApp() {
         loader.loadServedBundle(state.currentRelease?.bundleId)
+        pendingRollbackEvent?.let { event ->
+            pendingRollbackEvent = null
+            listener.rolledBack(event)
+        }
         if (isCurrentReleaseUnconfirmed()) startReadyTimer()
     }
 
@@ -350,11 +425,11 @@ class Core(
         }
         if (isStartSyncPending) {
             isStartSyncPending = false
-            if (configuration.autoSync) scope.launch { sync(SyncTrigger.START) }
+            if (configuration.autoCheck) scope.launch { sync(SyncTrigger.START) }
         }
     }
 
-    private fun rollbackCurrentRelease(reason: RollbackReason) {
+    private fun rollbackCurrentRelease(reason: RollbackReason, detail: String?) {
         val current = state.currentRelease ?: return
         stopReadyTimer()
         state.failedBundleIds = (state.failedBundleIds + current.bundleId).distinct().sorted()
@@ -362,10 +437,10 @@ class Core(
         state.currentRelease = fallback
         state.nextRelease = null
         state.lastRollback = LastRollback(current, fallback, reason)
-        enqueueDeviceEvent(DeviceEvent.failed(current.id, reason.name))
+        pendingRollbackEvent = RolledBackEvent(current, fallback, reason)
+        enqueueDeviceEvent(DeviceEvent.failed(current.id, reason.name, detail))
         enqueueDeviceEvent(DeviceEvent.rolledBack(current.id, fallback?.id))
         loader.persistServedBundle(fallback?.bundleId)
-        listener.rolledBack(RolledBackEvent(current, fallback, reason))
         if (reason == RollbackReason.REPORTED_BY_APP) reloadApp() else restartThroughGate { reloadApp() }
     }
 
@@ -397,12 +472,12 @@ class Core(
     }
 
     internal suspend fun handleReadyTimeout() = lock.withLock {
-        if (isCurrentReleaseUnconfirmed()) rollbackCurrentRelease(RollbackReason.READY_TIMEOUT)
+        if (isCurrentReleaseUnconfirmed()) rollbackCurrentRelease(RollbackReason.READY_TIMEOUT, null)
     }
 
     private fun scheduleIntervalSync(afterSeconds: Double) {
         intervalTimer?.cancel()
-        if (!configuration.autoSync) return
+        if (!configuration.autoCheck) return
         intervalTimer = scheduler.schedule(afterSeconds) { scope.launch { sync(SyncTrigger.INTERVAL) } }
     }
 
@@ -422,19 +497,36 @@ class Core(
         object Absent : IndexFetch()
     }
 
-    private suspend fun resolveChannelId(): String? = when (val choice = state.channel) {
-        null -> configuration.channelId
-        is ChannelChoice.Id -> choice.id
+    /** The runtime choice, then the configured id; a name resolves through the channels index, offline being offline and not an unknown name. */
+    private suspend fun resolveChannelId(): ChannelResolution = when (val choice = state.channel) {
+        null -> ChannelResolution.Id(configuration.channelId)
+        is ChannelChoice.Id -> ChannelResolution.Id(choice.id)
         is ChannelChoice.Name -> {
             val resolved = resolvedChannelName
             if (resolved != null && resolved.first == choice.name) {
-                resolved.second
+                ChannelResolution.Id(resolved.second)
             } else {
                 val url = "${configuration.filesBaseUrl}/apps/${configuration.appId}/channels/v1/index.json"
                 val response = runCatching { httpClient.get(url, emptyMap()) }.getOrNull()
-                val index = response?.takeIf { it.status == 200 }?.let { runCatching { ChannelsIndex.fromJson(org.json.JSONObject(String(it.body, Charsets.UTF_8))) }.getOrNull() }
-                val entry = index?.channels?.firstOrNull { it.name == choice.name }
-                entry?.also { resolvedChannelName = choice.name to it.id }?.id
+                when (response?.status) {
+                    null -> ChannelResolution.Offline
+                    200 -> {
+                        val index = runCatching { ChannelsIndex.fromJson(org.json.JSONObject(String(response.body, Charsets.UTF_8))) }.getOrNull()
+                        if (index == null) {
+                            ChannelResolution.Invalid("The channels index could not be parsed")
+                        } else {
+                            val entry = index.channels.firstOrNull { it.name == choice.name }
+                            if (entry == null) {
+                                ChannelResolution.Unknown
+                            } else {
+                                resolvedChannelName = choice.name to entry.id
+                                ChannelResolution.Id(entry.id)
+                            }
+                        }
+                    }
+                    404 -> ChannelResolution.Unknown
+                    else -> ChannelResolution.Offline
+                }
             }
         }
     }

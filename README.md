@@ -28,7 +28,7 @@ if (result.status === 'UPDATED') {
 }
 ```
 
-With `autoSync` on, the default, the SDK syncs on start, on resume and while the app stays in the foreground; `sync()` is for the moment you want an update now.
+With `autoCheck` on, the default, the SDK checks on start, on resume and while the app stays in the foreground, and what follows a check is the download and install strategies' business; `sync()` is for the moment you want an update now. An app that asks before downloading sets `downloadStrategy` to `manual` and calls `downloadUpdate()` on `updateAvailable`; one that protects a flow sets `installStrategy` to `manual` and calls `applyUpdate()` when it is ready.
 
 ## Documentation
 

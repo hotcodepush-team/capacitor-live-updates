@@ -40,7 +40,7 @@ data class LastRollback(val from: Release, val to: Release?, val reason: Rollbac
  */
 class StateStore(private val store: KeyValueStore) {
     init {
-        if (getRaw("stateVersion")?.toIntOrNull() != STATE_VERSION) deleteCacheKeys()
+        if (store.getInt(PREFIX + "stateVersion") != STATE_VERSION) deleteCacheKeys()
     }
 
     val deviceId: String
@@ -110,7 +110,7 @@ class StateStore(private val store: KeyValueStore) {
     /** Drops every cache key; the identity keys survive. Called at start on an unknown version, never by the app. */
     fun deleteCacheKeys() {
         CACHE_KEYS.forEach { putRaw(it, null) }
-        putRaw("stateVersion", STATE_VERSION.toString())
+        store.putInt(PREFIX + "stateVersion", STATE_VERSION)
     }
 
     private fun readObject(key: String): JSONObject? = getRaw(key)?.let { raw ->
@@ -128,7 +128,7 @@ class StateStore(private val store: KeyValueStore) {
     private fun putRaw(key: String, value: String?) = store.putString(PREFIX + key, value)
 
     companion object {
-        const val STATE_VERSION = 1
+        const val STATE_VERSION = 2
         const val PREFIX = "hotcodepush."
         private val CACHE_KEYS = listOf(
             "currentRelease", "nextRelease", "fallbackRelease", "failedBundleIds", "lastBuiltAt", "reportedAt", "acknowledgedReport",
