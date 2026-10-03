@@ -10,27 +10,21 @@ When code and plan disagree, stop and surface it; never improvise.
 ## Layout
 
 ```
-src/                        definitions.ts (the plugin interface), index.ts, web.ts (the no-op)
-ios/Sources/HotCodePushCore     the core: no Capacitor import, tested on the host with XCTest
-ios/Sources/HotCodePushPlugin   the Capacitor plugin and the bundle loader
-ios/Tests/HotCodePushCoreTests  the core's tests
-android/src/main/java/com/hotcodepush/core       the core: no Capacitor import, tested on the JVM with JUnit
-android/src/main/java/com/hotcodepush/capacitor  the Capacitor plugin and the bundle loader
-android/src/test                                 the core's tests
+src/                                             definitions.ts (the plugin interface), index.ts, web.ts (the no-op)
+ios/Sources/HotCodePushPlugin                    the Capacitor plugin and the bundle loader over HotCodePushProtocol
+android/src/main/java/com/hotcodepush/capacitor  the Capacitor plugin and the bundle loader over com.hotcodepush:protocol-android
 ```
 
-The native core lives here until the React Native SDK becomes its second consumer, when it moves to `protocol-ios` and `protocol-android`.
-Both cores implement the same functions with the same names, `sdk-api.md`'s _The state and the functions_: a change to one is a change to the other.
+The native cores live in `protocol-ios` and `protocol-android`, consumed at pinned commits: `Package.swift` by `revision`, the pod through the consumer's Podfile by `:git` and `:commit`, the Android module through JitPack by commit; a core change lands there first and arrives here as a bump of the pin.
+The plugin layer keeps the bundle loader, the readiness signal and the bridge, nothing of the protocol.
 
 ## Commands
 
-| Command                                | Does                               |
-| -------------------------------------- | ---------------------------------- |
-| `npm run lint`                         | ESLint, Prettier and SwiftLint     |
-| `npm run build`                        | the TypeScript into `dist/`        |
-| `npm run test:ios`                     | the Swift core's tests on the host |
-| `npm run test:android`                 | the Kotlin core's tests on the JVM |
-| `npm run verify:ios`, `verify:android` | the tests plus the platform build  |
+| Command                                | Does                           |
+| -------------------------------------- | ------------------------------ |
+| `npm run lint`                         | ESLint, Prettier and SwiftLint |
+| `npm run build`                        | the TypeScript into `dist/`    |
+| `npm run verify:ios`, `verify:android` | the platform builds            |
 
 Run `npm run fmt` before every commit.
 

@@ -5,12 +5,12 @@ import android.content.Context
 import android.net.ConnectivityManager
 import com.getcapacitor.Bridge
 import com.getcapacitor.plugin.WebView
-import com.hotcodepush.core.BundleLoader
-import com.hotcodepush.core.BundleManifest
-import com.hotcodepush.core.EmbeddedBundle
-import com.hotcodepush.core.PlainException
-import com.hotcodepush.core.ServedBundle
-import com.hotcodepush.core.WebViewGate
+import com.hotcodepush.protocol.BundleLoader
+import com.hotcodepush.protocol.EmbeddedBundle
+import com.hotcodepush.protocol.EmbeddedBundleManifest
+import com.hotcodepush.protocol.PlainException
+import com.hotcodepush.protocol.ServedBundle
+import com.hotcodepush.protocol.WebViewGate
 import java.io.File
 
 /**
@@ -61,7 +61,7 @@ class CapacitorBundleLoader(private val context: Context, private val bridge: ()
 }
 
 /** The files compiled into the binary, `assets/public/` in the APK, addressed by the embedded manifest's hashes. */
-class AssetsEmbeddedBundle(private val context: Context, manifest: BundleManifest) : EmbeddedBundle {
+class AssetsEmbeddedBundle(private val context: Context, manifest: EmbeddedBundleManifest) : EmbeddedBundle {
     private val pathsBySha256 = manifest.files.associate { it.sha256 to it.path }
 
     override fun has(sha256: String): Boolean {

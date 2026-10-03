@@ -1,10 +1,8 @@
 #if canImport(Capacitor)
 import Capacitor
 import Foundation
+import HotCodePushProtocol
 import UIKit
-#if canImport(HotCodePushCore)
-import HotCodePushCore
-#endif
 
 @objc(HotCodePushPlugin)
 public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {

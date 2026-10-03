@@ -1,10 +1,8 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 ext {
-    junitVersion = project.hasProperty('junitVersion') ? rootProject.ext.junitVersion : '4.13.2'
     androidxAppCompatVersion = project.hasProperty('androidxAppCompatVersion') ? rootProject.ext.androidxAppCompatVersion : '1.7.1'
     kotlinxCoroutinesVersion = project.hasProperty('kotlinxCoroutinesVersion') ? rootProject.ext.kotlinxCoroutinesVersion : '1.10.2'
-    okhttp3Version = project.hasProperty('okhttp3Version') ? rootProject.ext.okhttp3Version : '5.3.2'
 }
 
 buildscript {
@@ -45,9 +43,6 @@ android {
         sourceCompatibility JavaVersion.VERSION_21
         targetCompatibility JavaVersion.VERSION_21
     }
-    testOptions {
-        unitTests.returnDefaultValues = true
-    }
 }
 
 kotlin {
@@ -56,17 +51,16 @@ kotlin {
     }
 }
 
+// The core comes from protocol-android at a pinned commit, built by JitPack until the library is published.
 repositories {
     google()
     mavenCentral()
+    maven { url 'https://jitpack.io' }
 }
 
 dependencies {
     implementation project(':capacitor-android')
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
-    implementation "com.squareup.okhttp3:okhttp:$okhttp3Version"
+    implementation 'com.github.hotcodepush-team:protocol-android:d9360e0604e013ee7a2dfc2e58e13b90ac3d5e91'
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:$kotlinxCoroutinesVersion"
-    testImplementation "junit:junit:$junitVersion"
-    testImplementation "org.json:json:20250517"
-    testImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-test:$kotlinxCoroutinesVersion"
 }

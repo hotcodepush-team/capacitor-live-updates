@@ -1,10 +1,8 @@
 #if canImport(Capacitor)
 import Capacitor
 import Foundation
+import HotCodePushProtocol
 import Network
-#if canImport(HotCodePushCore)
-import HotCodePushCore
-#endif
 
 /// Capacitor loads the WebView from the path it persisted under `serverBasePath`, resolved inside
 /// `Library/NoCloud/ionic_built_snapshots/<last path component>`; a bundle is laid out there by path.
@@ -68,7 +66,7 @@ final class AppBundleEmbeddedBundle: EmbeddedBundle {
     private let pathsBySha256: [String: String]
     private let publicDirectory = Bundle.main.bundleURL.appendingPathComponent("public", isDirectory: true)
 
-    init(manifest: BundleManifest) {
+    init(manifest: EmbeddedBundleManifest) {
         var paths: [String: String] = [:]
         for file in manifest.files {
             paths[file.sha256] = file.path

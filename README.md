@@ -15,6 +15,22 @@ A consumer pins a commit and bumps it deliberately; the preview comment on each 
 
 The plugin reads `hotcodepush.json` from the app's resources, which `npx hotcodepush init` writes and the embed step carries into every native build.
 
+The native cores are the Swift package `HotCodePushProtocol` and the Android library `com.hotcodepush:protocol-android`, each pinned to a commit until it is published. Swift Package Manager, Capacitor's default on iOS, resolves the pinned revision on its own. A CocoaPods app pins the commit `Package.swift` names in its Podfile:
+
+```ruby
+pod 'HotCodePushProtocol', :git => 'https://github.com/hotcodepush-team/protocol-ios.git', :commit => '<sha>'
+```
+
+An Android app adds JitPack, which builds the pinned commit, to the repositories in its `android/build.gradle`:
+
+```groovy
+allprojects {
+  repositories {
+    maven { url 'https://jitpack.io' }
+  }
+}
+```
+
 On Android the plugin keeps its store out of device backups and transfers: its manifest sets `android:fullBackupContent` and `android:dataExtractionRules` on `<application>`, merged into the app's manifest. An app that already sets either attribute hits a manifest-merger conflict. Add `tools:replace="android:fullBackupContent"` or `tools:replace="android:dataExtractionRules"` to your own `<application>`, and put `<exclude domain="file" path="hotcodepush/" />` into your own rules, inside both `<cloud-backup>` and `<device-transfer>` for the extraction rules; otherwise the store rides along in the backup again.
 
 ## Usage
@@ -41,11 +57,11 @@ nvm use
 npm ci
 npm run lint
 npm run build
-npm run test:ios       # the Swift core on the host
-npm run test:android   # the Kotlin core on the JVM
+npm run verify:ios       # the iOS build
+npm run verify:android   # the Android build
 ```
 
-`npm run verify:ios` and `npm run verify:android` add the platform builds. The iOS package builds with `xcodebuild -scheme HotcodepushCapacitorLiveUpdates -destination generic/platform=iOS`.
+The cores and their tests live in [protocol-ios](https://github.com/hotcodepush-team/protocol-ios) and [protocol-android](https://github.com/hotcodepush-team/protocol-android).
 
 ## License
 

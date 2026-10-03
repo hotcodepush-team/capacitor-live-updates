@@ -32,7 +32,6 @@
     "android/consumer-rules.pro",
     "dist/",
     "ios/Sources/",
-    "ios/Tests/",
     "HotcodepushCapacitorLiveUpdates.podspec",
     "Package.swift"
   ],
@@ -41,12 +40,9 @@
     "clean": "rimraf ./dist",
     "fmt": "eslint . --fix && prettier --write . && swiftlint --fix --quiet ios",
     "lint": "eslint . && prettier --check . && swiftlint lint --quiet --strict ios",
-    "test": "npm run test:ios && npm run test:android",
-    "test:android": "cd android && ./gradlew test --console=plain",
-    "test:ios": "swift test",
-    "verify": "npm run lint && npm run build && npm run test",
-    "verify:android": "cd android && ./gradlew build test --console=plain",
-    "verify:ios": "npm run test:ios && xcodebuild -scheme HotcodepushCapacitorLiveUpdates -destination generic/platform=iOS -quiet build"
+    "verify": "npm run lint && npm run build",
+    "verify:android": "cd android && ./gradlew build --console=plain",
+    "verify:ios": "xcodebuild -scheme HotcodepushCapacitorLiveUpdates -destination generic/platform=iOS -quiet build"
   },
   "devDependencies": {
     "@capacitor/android": "8.5.2",

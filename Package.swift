@@ -10,24 +10,18 @@ let package = Package(
             targets: ["HotCodePushPlugin"])
     ],
     dependencies: [
-        .package(url: "https://github.com/ionic-team/capacitor-swift-pm.git", from: "8.0.0")
+        .package(url: "https://github.com/ionic-team/capacitor-swift-pm.git", from: "8.0.0"),
+        .package(url: "https://github.com/hotcodepush-team/protocol-ios.git", revision: "b4917341a05db9f145a766591c1ecef73d439ca5")
     ],
     targets: [
         .target(
-            name: "HotCodePushCore",
-            path: "ios/Sources/HotCodePushCore"),
-        .target(
             name: "HotCodePushPlugin",
             dependencies: [
-                "HotCodePushCore",
+                .product(name: "HotCodePushProtocol", package: "protocol-ios"),
                 .product(name: "Capacitor", package: "capacitor-swift-pm", condition: .when(platforms: [.iOS])),
                 .product(name: "Cordova", package: "capacitor-swift-pm", condition: .when(platforms: [.iOS]))
             ],
             path: "ios/Sources/HotCodePushPlugin",
-            resources: [.copy("PrivacyInfo.xcprivacy")]),
-        .testTarget(
-            name: "HotCodePushCoreTests",
-            dependencies: ["HotCodePushCore"],
-            path: "ios/Tests/HotCodePushCoreTests")
+            resources: [.copy("PrivacyInfo.xcprivacy")])
     ]
 )
