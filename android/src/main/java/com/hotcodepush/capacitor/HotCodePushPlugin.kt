@@ -18,6 +18,7 @@ import com.hotcodepush.protocol.Clock
 import com.hotcodepush.protocol.Configuration
 import com.hotcodepush.protocol.Core
 import com.hotcodepush.protocol.CoreListener
+import com.hotcodepush.protocol.DebugScreen
 import com.hotcodepush.protocol.DeviceFacts
 import com.hotcodepush.protocol.DownloadStrategy
 import com.hotcodepush.protocol.FileStore
@@ -176,14 +177,15 @@ class HotCodePushPlugin : Plugin(), CoreListener {
         runVoid(call) { it.setRestartAllowed(allowed) }
     }
 
-    /** The debug screen arrives with the shared native cores; until then the call resolves and shows nothing. */
+    /** Opens the shared core's debug screen over the app's activity. */
     @PluginMethod
     fun showDebugScreen(call: PluginCall) {
+        val core = core
         if (core == null) {
             call.reject(NOT_CONFIGURED_MESSAGE)
             return
         }
-        Logger.info(TAG, "The debug screen is not available yet.")
+        DebugScreen.show(activity, core)
         call.resolve()
     }
 
