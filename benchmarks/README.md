@@ -17,8 +17,8 @@ The "without" variant is the demo with the plugin, its hook, its resource file a
 
 ## Where the bytes sit
 
-On the first baseline the Android release APK grew by about 600 KB, almost all of it `classes.dex`: the plugin's own code plus OkHttp and kotlinx-coroutines, which the demo did not carry before.
-The simulator app grew by about 2.4 MB, all in the `App` binary: the plugin is linked statically, and a simulator build is a two-slice fat binary, so a device build carries about half of that.
+On the current baseline the Android release APK grows by about 626 KB, almost all of it `classes.dex`: the plugin's code and the shared core's, plus OkHttp, which the demo did not carry before and which brings its public-suffix list of about 42 KB; kotlinx-coroutines is already in the demo, and the plugin only raises its version.
+The simulator app grows by about 3.2 MB, nearly all of it in the `App` binary: the plugin and the core are linked statically, and a simulator build is a two-slice fat binary, so a device build carries about half of that; the rest is two privacy-manifest bundles of about 5 KB and the resource file.
 
 ## Running it
 
