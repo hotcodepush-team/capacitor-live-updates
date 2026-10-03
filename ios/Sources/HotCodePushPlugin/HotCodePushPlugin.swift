@@ -142,14 +142,20 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
         runVoid(call) { core in await core.setRestartAllowed(allowed) }
     }
 
-    /// The debug screen arrives with the shared native cores; until then the call resolves and shows nothing.
+    /// The shared core's debug screen, presented over the bridge's view controller.
     @objc func showDebugScreen(_ call: CAPPluginCall) {
-        guard core != nil else {
+        guard let core = core else {
             call.reject(HotCodePushPlugin.notConfiguredMessage)
             return
         }
-        CAPLog.print("[HotCodePush] The debug screen is not available yet.")
-        call.resolve()
+        DispatchQueue.main.async { [weak self] in
+            guard let presenter = self?.bridge?.viewController else {
+                call.reject("The debug screen has no view controller to open over")
+                return
+            }
+            DebugScreenViewController.present(core: core, from: presenter)
+            call.resolve()
+        }
     }
 
     @objc func sync(_ call: CAPPluginCall) {
