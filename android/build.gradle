@@ -61,6 +61,6 @@ repositories {
 dependencies {
     implementation project(':capacitor-android')
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
-    implementation 'com.github.hotcodepush-team:protocol-android:861bf2bc857dd47d8ce641894ee3bc88499d5a17'
+    implementation 'com.github.hotcodepush-team:protocol-android:43ee2041c507f0ed06ae517cd44838fd6a3375d3'
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:$kotlinxCoroutinesVersion"
 }
