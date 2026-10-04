@@ -111,14 +111,17 @@ if (
   !existsSync(join(target, 'android/app/src/main/assets/hotcodepush.json'))
 ) {
   throw new Error(
-    "the resource file was not written; the demo's capacitor:copy:after hook did not run",
+    "the resource file was not written; the demo's capacitor:copy:after hook did not run binary create",
   );
 }
 console.log(`${variant}: ${target}`);
 
+// A benchmark build is never shipped: offline, the demo's `binary create` hook writes the resource file
+// without a channel and creates no binary, whether or not the machine holds a HotCodePush token.
 function run(command, args) {
   execFileSync(command, args, {
     cwd: target,
+    env: { ...process.env, HOTCODEPUSH_OFFLINE: '1' },
     stdio: ['ignore', 'ignore', 'inherit'],
   });
 }
