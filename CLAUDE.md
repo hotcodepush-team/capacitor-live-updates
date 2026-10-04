@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 The HotCodePush Capacitor SDK: `@hotcodepush/capacitor-live-updates`, the plugin that delivers live updates to Capacitor apps on iOS and Android.
-Stack: TypeScript for the plugin surface, Swift for the iOS core, Kotlin for the Android core, Capacitor 7 and 8.
+Stack: TypeScript for the plugin surface, Swift for the iOS plugin layer, Kotlin for the Android plugin layer, Capacitor 7 and 8.
 
 The plan is the private `handbook` repo, checked out beside this one: `../handbook/docs/`.
 `sdk-api.md` is the SDK's specification — the methods, the configuration, the state keys, the wire shapes and the reason catalog; `architecture.md`'s _The device protocol_ and _Packs_ are the behaviour behind them.
