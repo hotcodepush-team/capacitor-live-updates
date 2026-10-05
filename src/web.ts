@@ -73,7 +73,7 @@ export class HotCodePushWeb extends WebPlugin implements HotCodePushPlugin {
 
   async notifyRendered(): Promise<void> {}
 
-  async rollback(): Promise<void> {}
+  async rollbackUpdate(): Promise<void> {}
 
   async setAttributes(): Promise<void> {}
 

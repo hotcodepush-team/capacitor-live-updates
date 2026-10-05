@@ -74,6 +74,6 @@
     "access": "public"
   },
   "dependencies": {
-    "@hotcodepush/protocol": "https://pkg.pr.new/hotcodepush-team/protocol-js/@hotcodepush/protocol@9314e1494f7c983385a634d4246be291802668ef"
+    "@hotcodepush/protocol": "https://pkg.pr.new/hotcodepush-team/protocol-js/@hotcodepush/protocol@cf8846d0a5a3ff3ccae5506778c54027084f9e9b"
   }
 }

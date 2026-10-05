@@ -139,9 +139,9 @@ class HotCodePushPlugin : Plugin(), CoreListener {
     fun notifyRendered(call: PluginCall) = runVoid(call) { it.handleRendered() }
 
     @PluginMethod
-    fun rollback(call: PluginCall) {
+    fun rollbackUpdate(call: PluginCall) {
         val reason = call.getString("reason")
-        runVoid(call) { it.rollback(reason) }
+        runVoid(call) { it.rollbackUpdate(reason) }
     }
 
     @PluginMethod

@@ -20,7 +20,7 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "getState", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "notifyReady", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "notifyRendered", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "rollback", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "rollbackUpdate", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setAttributes", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setChannel", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setRestartAllowed", returnType: CAPPluginReturnPromise),
@@ -101,9 +101,9 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
         runVoid(call) { core in await core.handleRendered() }
     }
 
-    @objc func rollback(_ call: CAPPluginCall) {
+    @objc func rollbackUpdate(_ call: CAPPluginCall) {
         let reason = call.getString("reason")
-        runVoid(call) { core in try await core.rollback(detail: reason) }
+        runVoid(call) { core in try await core.rollbackUpdate(detail: reason) }
     }
 
     @objc func setAttributes(_ call: CAPPluginCall) {
