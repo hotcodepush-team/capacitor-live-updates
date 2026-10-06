@@ -13,7 +13,7 @@ npx cap sync
 
 A consumer pins a commit and bumps it deliberately; the preview comment on each commit names its `<sha>`.
 
-The plugin reads `hotcodepush.json` from the app's resources, which `npx hotcodepush init` writes and the embed step carries into every native build.
+The plugin reads `hotcodepush.json` from the app's resources, which `npx hotcodepush init` writes and the build step, `binary create` from the `capacitor:copy:after` hook, carries into every native build.
 
 The native cores are the Swift package `HotCodePushCore` and the Android library `com.hotcodepush:core-android`, each pinned to a commit until it is published. Swift Package Manager, Capacitor's default on iOS, resolves the pinned revision on its own. A CocoaPods app pins the commit `Package.swift` names in its Podfile:
 
