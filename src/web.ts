@@ -17,7 +17,7 @@ import type {
  */
 export class HotCodePushWeb extends WebPlugin implements HotCodePushPlugin {
   private static readonly embeddedChannel: GetChannelResult = {
-    id: '',
+    id: null,
     name: null,
     source: 'config',
   };
