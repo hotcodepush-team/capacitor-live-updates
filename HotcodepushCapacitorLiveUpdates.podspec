@@ -14,6 +14,6 @@ Pod::Spec.new do |s|
   s.resource_bundles = { 'HotcodepushCapacitorLiveUpdates' => ['ios/Sources/HotCodePushPlugin/PrivacyInfo.xcprivacy'] }
   s.ios.deployment_target = '14.0'
   s.dependency 'Capacitor'
-  s.dependency 'HotCodePushProtocol'
+  s.dependency 'HotCodePushCore'
   s.swift_version = '5.9'
 end

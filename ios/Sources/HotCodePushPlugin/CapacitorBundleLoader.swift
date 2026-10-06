@@ -1,7 +1,7 @@
 #if canImport(Capacitor)
 import Capacitor
 import Foundation
-import HotCodePushProtocol
+import HotCodePushCore
 import Network
 
 /// Capacitor loads the WebView from the path it persisted under `serverBasePath`, resolved inside
@@ -61,14 +61,14 @@ final class CapacitorBundleLoader: BundleLoader {
     }
 }
 
-/// The files compiled into the binary, `public/` in the app bundle, addressed by the embedded manifest's hashes.
+/// The files compiled into the binary, `public/` in the app bundle, addressed by the embedded manifest's hashes; none without a manifest.
 final class AppBundleEmbeddedBundle: EmbeddedBundle {
     private let pathsBySha256: [String: String]
     private let publicDirectory = Bundle.main.bundleURL.appendingPathComponent("public", isDirectory: true)
 
-    init(manifest: EmbeddedBundleManifest) {
+    init(manifest: EmbeddedBundleManifest?) {
         var paths: [String: String] = [:]
-        for file in manifest.files {
+        for file in manifest?.files ?? [] {
             paths[file.sha256] = file.path
         }
         pathsBySha256 = paths

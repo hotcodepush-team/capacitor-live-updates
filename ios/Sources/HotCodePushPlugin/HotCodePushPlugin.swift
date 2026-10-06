@@ -1,7 +1,7 @@
 #if canImport(Capacitor)
 import Capacitor
 import Foundation
-import HotCodePushProtocol
+import HotCodePushCore
 import UIKit
 
 @objc(HotCodePushPlugin)
