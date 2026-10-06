@@ -1,42 +1,42 @@
 {
-  "measuredAt": "2026-10-04",
+  "measuredAt": "2026-10-06",
   "plugin": {
-    "commit": "ebe17003797db06ad5baa56e435ff619ba6a1ef0"
+    "commit": "ea2e01f36125b6867f373c0361ec0f4ecfab3421"
   },
   "demo": {
-    "commit": "656650b7ce5e45a479355d9b52619118b503217d"
+    "commit": "975a4ebbe67d65fc9e16ba5905f9b63516473bd8"
   },
   "android": {
     "releaseApkBytes": {
-      "with": 3987146,
+      "with": 3987138,
       "without": 3163043,
-      "added": 824103
+      "added": 824095
     },
     "coldStartMs": {
-      "with": 1122,
-      "without": 933,
-      "added": 189,
+      "with": 969,
+      "without": 851,
+      "added": 118,
       "device": "Pixel_9_Pro emulator, headless with the host GPU, Android 17 (API 37), 16 KB pages",
       "runsMs": {
-        "with": [1038, 1122, 1235, 1086, 2659],
-        "without": [1202, 1085, 933, 916, 845]
+        "with": [977, 898, 961, 987, 969],
+        "without": [851, 857, 858, 830, 816]
       }
     }
   },
   "ios": {
     "simulatorAppBytes": {
-      "with": 8455624,
+      "with": 8452480,
       "without": 5073070,
-      "added": 3382554
+      "added": 3379410
     },
     "coldStartMs": {
-      "with": 1181,
-      "without": 1190,
-      "added": -9,
+      "with": 1060,
+      "without": 1104,
+      "added": -44,
       "device": "iPhone 17 Pro simulator, iOS 26.5",
       "runsMs": {
-        "with": [1272, 1181, 1208, 1132, 1133],
-        "without": [1190, 1150, 1146, 1300, 1358]
+        "with": [2345, 1060, 1060, 1052, 1055],
+        "without": [1253, 1138, 1060, 1104, 1100]
       }
     }
   }
