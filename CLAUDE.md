@@ -11,11 +11,11 @@ When code and plan disagree, stop and surface it; never improvise.
 
 ```
 src/                                             definitions.ts (the plugin interface), index.ts, web.ts (the no-op)
-ios/Sources/HotCodePushPlugin                    the Capacitor plugin and the bundle loader over HotCodePushProtocol
-android/src/main/java/com/hotcodepush/capacitor  the Capacitor plugin and the bundle loader over com.hotcodepush:protocol-android
+ios/Sources/HotCodePushPlugin                    the Capacitor plugin and the bundle loader over HotCodePushCore
+android/src/main/java/com/hotcodepush/capacitor  the Capacitor plugin and the bundle loader over com.hotcodepush:core-android
 ```
 
-The native cores live in `protocol-ios` and `protocol-android`, consumed at pinned commits: `Package.swift` by `revision`, the pod through the consumer's Podfile by `:git` and `:commit`, the Android module through JitPack by commit; a core change lands there first and arrives here as a bump of the pin.
+The native cores live in `core-ios` and `core-android`, consumed at pinned commits: `Package.swift` by `revision`, the pod through the consumer's Podfile by `:git` and `:commit`, the Android module through JitPack by commit; a core change lands there first and arrives here as a bump of the pin.
 The plugin layer keeps the bundle loader, the readiness signal and the bridge, nothing of the protocol.
 
 ## Commands
@@ -32,7 +32,7 @@ Run `npm run fmt` before every commit.
 
 Consumers pin the preview builds pkg.pr.new publishes from `ci.yml` on every push and pull request, never npm: `npm install https://pkg.pr.new/hotcodepush-team/capacitor-live-updates/@hotcodepush/capacitor-live-updates@<sha>`.
 A consumer pins a commit and bumps it deliberately — never `@main`, whose moving content breaks `npm ci` against the lockfile's integrity hash.
-The shared types come from `@hotcodepush/protocol` the same way, pinned to a commit: `https://pkg.pr.new/hotcodepush-team/protocol-js/@hotcodepush/protocol@<sha>` in `package.json`; a protocol change is a bump of that sha.
+The shared types come from `@hotcodepush/protocol` the same way, pinned to a commit: `https://pkg.pr.new/hotcodepush-team/protocol/@hotcodepush/protocol@<sha>` in `package.json`; a protocol change is a bump of that sha.
 
 ## Rules
 

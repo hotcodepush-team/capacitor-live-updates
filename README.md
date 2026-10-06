@@ -15,10 +15,10 @@ A consumer pins a commit and bumps it deliberately; the preview comment on each 
 
 The plugin reads `hotcodepush.json` from the app's resources, which `npx hotcodepush init` writes and the embed step carries into every native build.
 
-The native cores are the Swift package `HotCodePushProtocol` and the Android library `com.hotcodepush:protocol-android`, each pinned to a commit until it is published. Swift Package Manager, Capacitor's default on iOS, resolves the pinned revision on its own. A CocoaPods app pins the commit `Package.swift` names in its Podfile:
+The native cores are the Swift package `HotCodePushCore` and the Android library `com.hotcodepush:core-android`, each pinned to a commit until it is published. Swift Package Manager, Capacitor's default on iOS, resolves the pinned revision on its own. A CocoaPods app pins the commit `Package.swift` names in its Podfile:
 
 ```ruby
-pod 'HotCodePushProtocol', :git => 'https://github.com/hotcodepush-team/protocol-ios.git', :commit => '<sha>'
+pod 'HotCodePushCore', :git => 'https://github.com/hotcodepush-team/core-ios.git', :commit => '<sha>'
 ```
 
 An Android app adds JitPack, which builds the pinned commit, to the repositories in its `android/build.gradle`:
@@ -61,8 +61,8 @@ npm run verify:ios       # the iOS build
 npm run verify:android   # the Android build
 ```
 
-The cores and their tests live in [protocol-ios](https://github.com/hotcodepush-team/protocol-ios) and [protocol-android](https://github.com/hotcodepush-team/protocol-android).
+The cores and their tests live in [core-ios](https://github.com/hotcodepush-team/core-ios) and [core-android](https://github.com/hotcodepush-team/core-android).
 
 ## License
 
-See [LICENSE](./LICENSE). An app that ships the plugin ships the native cores' third-party code with it: FreeBSD's bspatch under the BSD 2-clause licence on both platforms and, on Android, the decompression of bzip2 1.0.8 under the bzip2 licence. The cores' `THIRD-PARTY-NOTICES`, in [protocol-ios](https://github.com/hotcodepush-team/protocol-ios/blob/main/THIRD-PARTY-NOTICES) and in [protocol-android](https://github.com/hotcodepush-team/protocol-android/blob/main/THIRD-PARTY-NOTICES), carry the notices, and an app's distribution reproduces them: the BSD 2-clause licence requires it of a binary, the bzip2 licence appreciates the acknowledgment.
+See [LICENSE](./LICENSE). An app that ships the plugin ships the native cores' third-party code with it: FreeBSD's bspatch under the BSD 2-clause licence on both platforms and, on Android, the decompression of bzip2 1.0.8 under the bzip2 licence. The cores' `THIRD-PARTY-NOTICES`, in [core-ios](https://github.com/hotcodepush-team/core-ios/blob/main/THIRD-PARTY-NOTICES) and in [core-android](https://github.com/hotcodepush-team/core-android/blob/main/THIRD-PARTY-NOTICES), carry the notices, and an app's distribution reproduces them: the BSD 2-clause licence requires it of a binary, the bzip2 licence appreciates the acknowledgment.
