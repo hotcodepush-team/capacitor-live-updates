@@ -51,16 +51,25 @@ kotlin {
     }
 }
 
-// The core comes from core-android at a pinned commit, built by JitPack until the library is published.
 repositories {
     google()
     mavenCentral()
-    maven { url 'https://jitpack.io' }
+}
+
+// The core comes from core-android's maven branch until the library is on Maven Central. The app resolves it as well,
+// so every project of the app's build lists the branch, for the core's group alone.
+rootProject.allprojects {
+    repositories {
+        maven {
+            url 'https://raw.githubusercontent.com/hotcodepush-team/core-android/maven/'
+            content { includeGroup 'com.hotcodepush' }
+        }
+    }
 }
 
 dependencies {
     implementation project(':capacitor-android')
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
-    implementation 'com.github.hotcodepush-team:core-android:900f0edd2ffdb1d0471147779ba06c2828369261'
+    implementation 'com.hotcodepush:core-android:31be61880906c762ff8e61cf6bd038187f9dcc51'
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:$kotlinxCoroutinesVersion"
 }

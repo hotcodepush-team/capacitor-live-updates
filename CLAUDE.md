@@ -15,7 +15,7 @@ ios/Sources/HotCodePushPlugin                    the Capacitor plugin and the bu
 android/src/main/java/com/hotcodepush/capacitor  the Capacitor plugin and the bundle loader over com.hotcodepush:core-android
 ```
 
-The native cores live in `core-ios` and `core-android`, consumed at pinned commits: `Package.swift` by `revision`, the pod through the consumer's Podfile by `:git` and `:commit`, the Android module through JitPack by commit; a core change lands there first and arrives here as a bump of the pin.
+The native cores live in `core-ios` and `core-android`, consumed at pinned commits: `Package.swift` by `revision`, the pod through the consumer's Podfile by `:git` and `:commit`, the Android module from core-android's `maven` branch by full sha, which `android/build.gradle` adds to every project of the app's build; a core change lands there first and arrives here as a bump of the pin.
 The plugin layer keeps the bundle loader, the readiness signal and the bridge, nothing of the protocol.
 
 ## Commands
