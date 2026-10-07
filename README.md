@@ -50,7 +50,7 @@ npm ci
 npm run lint
 npm run build
 npm run verify:ios       # the iOS build
-npm run verify:android   # the Android build
+npm run verify:android   # the Android build and its unit tests
 ```
 
 The cores and their tests live in [core-ios](https://github.com/hotcodepush-team/core-ios) and [core-android](https://github.com/hotcodepush-team/core-android).
