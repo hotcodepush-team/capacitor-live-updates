@@ -32,13 +32,18 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
 
     private var core: Core?
     private var loader: CapacitorBundleLoader?
+    private lazy var pageEvents = PageEvents(plugin: self)
 
+    /// Runs inside Capacitor's bridge, before its view controller loads the WebView: the start decides the bundle the first load
+    /// serves, waiting for the core at most its bound, so the WebView never loads a bundle the start replaces.
     override public func load() {
-        guard let configuration = HotCodePushPlugin.readConfiguration() else {
+        guard let configuration = HotCodePushPlugin.readConfiguration(), let bridge = bridge else {
             CAPLog.print("[HotCodePush] ", HotCodePushPlugin.notConfiguredMessage)
             return
         }
-        let loader = CapacitorBundleLoader(plugin: self)
+        let loader = CapacitorBundleLoader(bridge: bridge) { [weak self] in
+            self?.pageEvents.holdUntilNextPage()
+        }
         let core = Core(
             configuration: configuration,
             device: HotCodePushPlugin.deviceFacts(),
@@ -50,9 +55,26 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
             listener: self)
         self.loader = loader
         self.core = core
+        _ = core.handleAppStartBlocking()
+        loader.beginServing()
+        if let webView = bridge.webView {
+            PageStartListener.attach(to: webView) { [weak self] url in
+                self?.handlePageStart(url: url)
+            }
+        }
         NotificationCenter.default.addObserver(self, selector: #selector(handleDidEnterBackground), name: UIApplication.didEnterBackgroundNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(handleWillEnterForeground), name: UIApplication.willEnterForegroundNotification, object: nil)
-        Task { await core.handleAppStart() }
+    }
+
+    /// A page of the app began: the events held for it go out, and one the SDK did not load is the app reloading on its own, a
+    /// `location.reload()` among them, which serves the bundle a start would and goes through the gate as a start does.
+    private func handlePageStart(url: URL) {
+        guard let serverURL = bridge?.config.serverURL, url.absoluteString.hasPrefix(serverURL.absoluteString) else { return }
+        let isLoadedBySdk = pageEvents.isPageLoadPending
+        pageEvents.releaseToPage()
+        guard !isLoadedBySdk, let core = core, let loader = loader else { return }
+        loader.reloadPersistedBundle()
+        Task { await core.handleAppReload() }
     }
 
     @objc private func handleDidEnterBackground() {
@@ -256,31 +278,37 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
 
 extension HotCodePushPlugin: CoreListener {
     public func updateAvailable(_ event: UpdateAvailableEvent) {
-        notify("updateAvailable", event)
+        deliver("updateAvailable", event)
     }
 
     public func updateDownloaded(_ event: UpdateDownloadedEvent) {
-        notify("updateDownloaded", event)
+        deliver("updateDownloaded", event)
     }
 
     public func updateFailed(_ event: UpdateFailedEvent) {
-        notify("updateFailed", event)
+        deliver("updateFailed", event)
     }
 
     public func downloadProgress(releaseId: String, downloadedBytes: Int, totalBytes: Int) {
         let progress = totalBytes > 0 ? Double(downloadedBytes) / Double(totalBytes) : 0
-        notifyListeners("downloadProgress", data: ["releaseId": releaseId, "downloadedBytes": downloadedBytes, "totalBytes": totalBytes, "progress": progress])
+        deliver("downloadProgress", data: ["releaseId": releaseId, "downloadedBytes": downloadedBytes, "totalBytes": totalBytes, "progress": progress])
     }
 
-    /// Retained until the reloaded web layer listens: the event belongs to the start that follows the rollback.
+    /// Retained until the page listens: the event belongs to the page the rollback reloads into.
     public func rolledBack(_ event: RolledBackEvent) {
-        guard let js = try? HotCodePushPlugin.jsObject(event) else { return }
-        notifyListeners("rolledBack", data: js, retainUntilConsumed: true)
+        deliver("rolledBack", event, retainUntilConsumed: true)
     }
 
-    private func notify<T: Encodable>(_ eventName: String, _ event: T) {
-        guard let js = try? HotCodePushPlugin.jsObject(event) else { return }
-        notifyListeners(eventName, data: js)
+    private func deliver<T: Encodable>(_ eventName: String, _ event: T, retainUntilConsumed: Bool = false) {
+        guard let data = try? HotCodePushPlugin.jsObject(event) else { return }
+        deliver(eventName, data: data, retainUntilConsumed: retainUntilConsumed)
+    }
+
+    /// On the main thread, in order behind the reload the loader starts there, so an event that follows a reload waits for its page.
+    private func deliver(_ eventName: String, data: JSObject, retainUntilConsumed: Bool = false) {
+        DispatchQueue.main.async { [weak self] in
+            self?.pageEvents.deliver(eventName, data: data, retainUntilConsumed: retainUntilConsumed)
+        }
     }
 }
 #endif

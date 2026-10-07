@@ -4,18 +4,28 @@ import Foundation
 import HotCodePushCore
 import Network
 
-/// Capacitor loads the WebView from the path it persisted under `serverBasePath`, resolved inside
-/// `Library/NoCloud/ionic_built_snapshots/<last path component>`; a bundle is laid out there by path.
+/// Capacitor serves the WebView from its bridge's base path, at launch the path persisted under `serverBasePath`, resolved inside
+/// `Library/NoCloud/ionic_built_snapshots/<last path component>`; a bundle is laid out there by path. Until the start has decided,
+/// a switch only changes what the first load serves; from then on it reloads the WebView.
 final class CapacitorBundleLoader: BundleLoader {
     private static let serverBasePathKey = "serverBasePath"
     private static let snapshotsDirectory = "NoCloud/ionic_built_snapshots"
 
-    private weak var plugin: CAPPlugin?
+    private weak var bridge: CAPBridgeProtocol?
+    private let willLoadPage: () -> Void
+    private let lock = NSLock()
     private let monitor = NWPathMonitor()
     private var isMetered = false
+    /// The bundle the WebView serves, or serves at its first load while the start decides; `nil` is the embedded bundle.
+    private var servedBundle: String?
+    /// The WebView loads: a switch reloads it from here on.
+    private var isServing = false
 
-    init(plugin: CAPPlugin) {
-        self.plugin = plugin
+    /// `willLoadPage` runs on the main thread before every load the SDK starts, the first one included.
+    init(bridge: CAPBridgeProtocol, willLoadPage: @escaping () -> Void) {
+        self.bridge = bridge
+        self.willLoadPage = willLoadPage
+        servedBundle = CapacitorBundleLoader.resolveBundleId(path: bridge.config.appLocation.path)
         monitor.pathUpdateHandler = { [weak self] path in
             self?.isMetered = path.isExpensive || path.isConstrained
         }
@@ -23,8 +33,7 @@ final class CapacitorBundleLoader: BundleLoader {
     }
 
     func projectionDirectory(bundleId: String) -> URL {
-        let library = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first!
-        return library.appendingPathComponent(CapacitorBundleLoader.snapshotsDirectory, isDirectory: true).appendingPathComponent(bundleId, isDirectory: true)
+        return CapacitorBundleLoader.projectionDirectory(bundleId: bundleId)
     }
 
     func deleteProjection(bundleId: String) {
@@ -32,32 +41,78 @@ final class CapacitorBundleLoader: BundleLoader {
     }
 
     func persistServedBundle(bundleId: String?) {
-        if let bundleId = bundleId {
-            KeyValueStore.standard[CapacitorBundleLoader.serverBasePathKey] = projectionDirectory(bundleId: bundleId).path
-        } else {
-            KeyValueStore.standard[CapacitorBundleLoader.serverBasePathKey] = ""
-        }
+        KeyValueStore.standard[CapacitorBundleLoader.serverBasePathKey] = bundleId.map { projectionDirectory(bundleId: $0).path } ?? ""
     }
 
     func loadServedBundle(bundleId: String?) {
         persistServedBundle(bundleId: bundleId)
-        DispatchQueue.main.async { [weak self] in
-            guard let viewController = self?.plugin?.bridge?.viewController as? CAPBridgeViewController else { return }
-            let path = bundleId.map { self!.projectionDirectory(bundleId: $0).path } ?? Bundle.main.bundleURL.appendingPathComponent("public").path
-            viewController.setServerBasePath(path: path)
+        let isReload = locked { () -> Bool in
+            servedBundle = bundleId
+            return isServing
+        }
+        if isReload {
+            DispatchQueue.main.async { [weak self] in
+                self?.reloadWebView(bundleId: bundleId)
+            }
         }
     }
 
     func servedBundleId() -> String? {
-        guard let viewController = plugin?.bridge?.viewController as? CAPBridgeViewController else {
-            return nil
-        }
-        let url = URL(fileURLWithPath: viewController.getServerBasePath())
-        return url.path.contains(CapacitorBundleLoader.snapshotsDirectory) ? url.lastPathComponent : nil
+        return locked { servedBundle }
     }
 
     func isConnectionMetered() -> Bool {
         return isMetered
+    }
+
+    /// The start has decided: the bridge serves its bundle from the first load on, before Capacitor checks that the path exists,
+    /// and a switch reloads the WebView from here on. Main thread, before the WebView loads.
+    func beginServing() {
+        let bundleId = locked { () -> String? in
+            isServing = true
+            return servedBundle
+        }
+        willLoadPage()
+        bridge?.setServerBasePath(CapacitorBundleLoader.basePath(bundleId: bundleId))
+    }
+
+    /// A reload the SDK did not start serves, as a start does, the bundle persisted for the next start. Main thread.
+    func reloadPersistedBundle() {
+        let persistedPath = KeyValueStore.standard[CapacitorBundleLoader.serverBasePathKey, as: String.self]
+        let persistedBundleId = CapacitorBundleLoader.resolveBundleId(path: persistedPath)
+        if persistedBundleId != servedBundleId() {
+            loadServedBundle(bundleId: persistedBundleId)
+        }
+    }
+
+    private func reloadWebView(bundleId: String?) {
+        guard let bridge = bridge else { return }
+        willLoadPage()
+        bridge.setServerBasePath(CapacitorBundleLoader.basePath(bundleId: bundleId))
+        _ = bridge.webView?.load(URLRequest(url: bridge.config.serverURL))
+    }
+
+    private func locked<T>(_ body: () -> T) -> T {
+        lock.lock()
+        defer { lock.unlock() }
+        return body()
+    }
+
+    private static func projectionDirectory(bundleId: String) -> URL {
+        let library = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first!
+        return library.appendingPathComponent(snapshotsDirectory, isDirectory: true).appendingPathComponent(bundleId, isDirectory: true)
+    }
+
+    private static func basePath(bundleId: String?) -> String {
+        return bundleId.map { projectionDirectory(bundleId: $0).path } ?? Bundle.main.bundleURL.appendingPathComponent("public").path
+    }
+
+    /// The bundle a base path names as Capacitor resolves it, by its last component under the snapshots directory, while that tree is
+    /// on disk; a tree a restore from backup did not bring back, or any other path, is the embedded bundle.
+    private static func resolveBundleId(path: String?) -> String? {
+        guard let path = path, path.contains(snapshotsDirectory) else { return nil }
+        let bundleId = URL(fileURLWithPath: path).lastPathComponent
+        return FileManager.default.fileExists(atPath: projectionDirectory(bundleId: bundleId).path) ? bundleId : nil
     }
 }
 

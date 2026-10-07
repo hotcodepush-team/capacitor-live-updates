@@ -3,6 +3,8 @@ package com.hotcodepush.capacitor
 import android.app.Activity
 import android.content.Context
 import android.net.ConnectivityManager
+import android.os.Handler
+import android.os.Looper
 import com.getcapacitor.Bridge
 import com.getcapacitor.plugin.WebView
 import com.hotcodepush.core.BundleLoader
@@ -10,17 +12,24 @@ import com.hotcodepush.core.EmbeddedBundle
 import com.hotcodepush.core.EmbeddedBundleManifest
 import com.hotcodepush.core.PlainException
 import com.hotcodepush.core.ServedBundle
-import com.hotcodepush.core.WebViewGate
 import java.io.File
 
 /**
- * Capacitor loads the WebView from the directory it persisted under `serverBasePath` in its
- * `CapWebViewSettings` preferences when that directory exists; a bundle is laid out there by path.
- * The bridge's local server exists only once the WebView has loaded, so a switch waits for it.
+ * Capacitor serves the WebView from the directory it persisted under `serverBasePath` in its `CapWebViewSettings` preferences,
+ * read when the bridge loads the WebView right after the plugins load; a bundle is laid out there by path. Until the start has
+ * decided, a switch only changes what that first load serves; from then on it reloads the WebView.
+ *
+ * `willLoadPage` runs on the main thread before every load the SDK starts, the first one included.
  */
-class CapacitorBundleLoader(private val context: Context, private val bridge: () -> Bridge?) : BundleLoader {
+class CapacitorBundleLoader(private val context: Context, private val bridge: Bridge, private val willLoadPage: () -> Unit) : BundleLoader {
     private val projectionsDirectory = File(File(context.filesDir, "hotcodepush"), "www")
-    private val gate = WebViewGate()
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    /** The bundle the WebView serves, or serves at its first load while the start decides; `null` is the embedded bundle. */
+    private var servedBundle: String? = resolvePersistedBundleId()
+
+    /** The WebView loads: a switch reloads it from here on. */
+    private var isServing = false
 
     override fun projectionDirectory(bundleId: String): File = File(projectionsDirectory, bundleId)
 
@@ -34,24 +43,44 @@ class CapacitorBundleLoader(private val context: Context, private val bridge: ()
 
     override fun loadServedBundle(bundleId: String?) {
         persistServedBundle(bundleId)
-        gate.runWhenLoaded {
-            val bridge = bridge() ?: return@runWhenLoaded
-            bridge.activity.runOnUiThread {
-                if (bundleId == null) bridge.setServerAssetPath(EMBEDDED_ASSET_PATH) else bridge.setServerBasePath(projectionDirectory(bundleId).path)
-            }
+        val isReload = synchronized(this) {
+            servedBundle = bundleId
+            isServing
         }
+        if (isReload) mainHandler.post { reloadWebView(bundleId) }
     }
 
-    /** The persisted path is what the framework loads at start; the bridge itself is not asked, since it may not exist yet. */
-    override fun servedBundleId(): String? = ServedBundle.resolveBundleId(preferences().getString(WebView.CAP_SERVER_PATH, null), projectionsDirectory)
+    override fun servedBundleId(): String? = synchronized(this) { servedBundle }
 
     override fun isConnectionMetered(): Boolean =
         (context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager)?.isActiveNetworkMetered ?: false
 
-    fun handleWebViewLoaded() = gate.markLoaded()
+    /** The start has decided: the bridge's first load reads its bundle from the preferences, and a switch reloads the WebView from here on. Main thread, in `load()`. */
+    fun beginServing() {
+        val bundleId = synchronized(this) {
+            isServing = true
+            servedBundle
+        }
+        persistServedBundle(bundleId)
+        willLoadPage()
+    }
 
-    /** The activity is gone: a switch still waiting for its WebView has nowhere to go. */
-    fun close() = gate.close()
+    /** A reload the SDK did not start serves, as a start does, the bundle persisted for the next start. Main thread. */
+    fun reloadPersistedBundle() {
+        val persistedBundleId = resolvePersistedBundleId()
+        if (persistedBundleId != servedBundleId()) loadServedBundle(persistedBundleId)
+    }
+
+    /** The activity is gone: a reload still waiting for the main thread has no WebView to go to. */
+    fun close() = mainHandler.removeCallbacksAndMessages(null)
+
+    private fun reloadWebView(bundleId: String?) {
+        willLoadPage()
+        if (bundleId == null) bridge.setServerAssetPath(EMBEDDED_ASSET_PATH) else bridge.setServerBasePath(projectionDirectory(bundleId).path)
+    }
+
+    /** A persisted tree that is no longer on disk is the embedded bundle, which is what Capacitor loads for it too. */
+    private fun resolvePersistedBundleId(): String? = ServedBundle.resolveBundleId(preferences().getString(WebView.CAP_SERVER_PATH, null), projectionsDirectory)
 
     private fun preferences() = context.getSharedPreferences(WebView.WEBVIEW_PREFS_NAME, Activity.MODE_PRIVATE)
 

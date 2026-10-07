@@ -47,17 +47,29 @@ import java.io.File
 class HotCodePushPlugin : Plugin(), CoreListener {
     private var core: Core? = null
     private var loader: CapacitorBundleLoader? = null
-    private var isWebViewListenerRegistered = false
     private val scheduler = HandlerScheduler()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val pageEvents = PageEvents { eventName, data, retainUntilConsumed -> notifyListeners(eventName, data, retainUntilConsumed) }
 
+    /** Hears each page the WebView begins in its main frame, after the bridge dropped the listeners of the one before. */
+    private val pageStartListener = object : WebViewListener() {
+        override fun onPageStarted(webView: android.webkit.WebView) {
+            if (webView.url?.startsWith(bridge.localUrl) == true) handlePageStart()
+        }
+    }
+
+    /**
+     * Runs while Capacitor builds its bridge, before the bridge loads the WebView: the start decides the bundle the first load
+     * serves, waiting for the core at most its bound, so the WebView never loads a bundle the start replaces.
+     */
     override fun load() {
         val configuration = readConfiguration(context)
         if (configuration == null) {
             Logger.error(TAG, NOT_CONFIGURED_MESSAGE, null)
             return
         }
-        val loader = CapacitorBundleLoader(context) { bridge }
+        val loader = CapacitorBundleLoader(context, bridge) { pageEvents.holdUntilNextPage() }
         val core = Core(
             configuration = configuration,
             device = deviceFacts(context),
@@ -74,7 +86,23 @@ class HotCodePushPlugin : Plugin(), CoreListener {
         )
         this.core = core
         this.loader = loader
-        scope.launch { core.handleAppStart() }
+        core.handleAppStartBlocking()
+        loader.beginServing()
+        // The bridge takes its WebView listeners from its builder once it is built, which replaces any added while it builds.
+        mainHandler.post { bridge.addWebViewListener(pageStartListener) }
+    }
+
+    /**
+     * A page of the app began: the events held for it go out, and one the SDK did not load is the app reloading on its own, a
+     * `location.reload()` among them, which serves the bundle a start would and goes through the gate as a start does.
+     */
+    private fun handlePageStart() {
+        val isLoadedBySdk = pageEvents.isPageLoadPending
+        pageEvents.releaseToPage()
+        if (isLoadedBySdk) return
+        val core = core ?: return
+        loader?.reloadPersistedBundle()
+        scope.launch { core.handleAppReload() }
     }
 
     override fun handleOnPause() {
@@ -85,7 +113,6 @@ class HotCodePushPlugin : Plugin(), CoreListener {
 
     override fun handleOnResume() {
         super.handleOnResume()
-        registerWebViewListener()
         val core = core ?: return
         scope.launch { core.handleAppResume() }
     }
@@ -95,20 +122,10 @@ class HotCodePushPlugin : Plugin(), CoreListener {
         super.handleOnDestroy()
         scope.cancel()
         scheduler.cancelAll()
+        mainHandler.removeCallbacksAndMessages(null)
         loader?.close()
         core = null
         loader = null
-    }
-
-    /** The bridge accepts a WebView listener only once the activity resumed, never in `load()`. */
-    private fun registerWebViewListener() {
-        if (isWebViewListenerRegistered) return
-        isWebViewListenerRegistered = true
-        bridge.addWebViewListener(object : WebViewListener() {
-            override fun onPageLoaded(webView: android.webkit.WebView) {
-                loader?.handleWebViewLoaded()
-            }
-        })
     }
 
     @PluginMethod
@@ -245,26 +262,23 @@ class HotCodePushPlugin : Plugin(), CoreListener {
 
     // The listener
 
-    override fun updateAvailable(event: UpdateAvailableEvent) {
-        notifyListeners("updateAvailable", JSObject.fromJSONObject(event.toJson()))
-    }
+    override fun updateAvailable(event: UpdateAvailableEvent) = deliver("updateAvailable", JSObject.fromJSONObject(event.toJson()))
 
-    override fun updateDownloaded(event: UpdateDownloadedEvent) {
-        notifyListeners("updateDownloaded", JSObject.fromJSONObject(event.toJson()))
-    }
+    override fun updateDownloaded(event: UpdateDownloadedEvent) = deliver("updateDownloaded", JSObject.fromJSONObject(event.toJson()))
 
-    override fun updateFailed(event: UpdateFailedEvent) {
-        notifyListeners("updateFailed", JSObject.fromJSONObject(event.toJson()))
-    }
+    override fun updateFailed(event: UpdateFailedEvent) = deliver("updateFailed", JSObject.fromJSONObject(event.toJson()))
 
     override fun downloadProgress(releaseId: String, downloadedBytes: Long, totalBytes: Long) {
         val progress = if (totalBytes > 0) downloadedBytes.toDouble() / totalBytes else 0.0
-        notifyListeners("downloadProgress", JSObject().put("releaseId", releaseId).put("downloadedBytes", downloadedBytes).put("totalBytes", totalBytes).put("progress", progress))
+        deliver("downloadProgress", JSObject().put("releaseId", releaseId).put("downloadedBytes", downloadedBytes).put("totalBytes", totalBytes).put("progress", progress))
     }
 
-    /** Retained until the reloaded web layer listens: the event belongs to the start that follows the rollback. */
-    override fun rolledBack(event: RolledBackEvent) {
-        notifyListeners("rolledBack", JSObject.fromJSONObject(event.toJson()), true)
+    /** Retained until the page listens: the event belongs to the page the rollback reloads into. */
+    override fun rolledBack(event: RolledBackEvent) = deliver("rolledBack", JSObject.fromJSONObject(event.toJson()), retainUntilConsumed = true)
+
+    /** On the main thread, in order behind the reload the loader starts there, so an event that follows a reload waits for its page. */
+    private fun deliver(eventName: String, data: JSObject, retainUntilConsumed: Boolean = false) {
+        mainHandler.post { pageEvents.deliver(eventName, data, retainUntilConsumed) }
     }
 
     companion object {
