@@ -70,7 +70,7 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func checkForUpdate(_ call: CAPPluginCall) {
-        run(call) { core in await core.checkForUpdate() }
+        run(call) { core in try await core.checkForUpdate() }
     }
 
     @objc func clearUpdates(_ call: CAPPluginCall) {
@@ -78,7 +78,7 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func downloadUpdate(_ call: CAPPluginCall) {
-        run(call) { core in await core.downloadUpdate() }
+        run(call) { core in try await core.downloadUpdate() }
     }
 
     @objc func getChannel(_ call: CAPPluginCall) {
@@ -131,7 +131,7 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
         } else {
             choice = nil
         }
-        runVoid(call) { core in await core.setChannel(choice) }
+        runVoid(call) { core in try await core.setChannel(choice) }
     }
 
     @objc func setRestartAllowed(_ call: CAPPluginCall) {
@@ -161,7 +161,7 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func sync(_ call: CAPPluginCall) {
         do {
             let options = try HotCodePushPlugin.syncOptions(from: call)
-            run(call) { core in await core.sync(trigger: .manual, options: options) }
+            run(call) { core in try await core.sync(trigger: .manual, options: options) }
         } catch {
             call.reject(error.localizedDescription)
         }
