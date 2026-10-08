@@ -47,6 +47,7 @@ The shared types come from `@hotcodepush/protocol` the same way, pinned to a com
 - Statuses and reasons are `SCREAMING_SNAKE_CASE` from the one catalog; a method throws a plain error only for a programming mistake.
 - Results are one shape per method and never throw for an outcome an app should handle.
 - The Capacitor constraint on iOS: a served bundle is laid out under `Library/NoCloud/ionic_built_snapshots/<bundleId>`, the only place Capacitor resolves its persisted base path.
+- On Android, Capacitor loads a persisted `serverBasePath` twice at the start: `setServerBasePath()` posts a load and `loadWebView()` loads directly. Both page starts are the SDK's own, so the loader arms the page hold once more behind Capacitor's posted load when the start serves a downloaded bundle; a page start counted as the app's reload would apply a stored `next-start` release in the same launch. iOS reads the persisted path in `instanceDescriptor()` and loads once.
 
 ## Agent workspace
 
