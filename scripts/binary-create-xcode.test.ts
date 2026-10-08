@@ -62,29 +62,53 @@ describe.skipIf(process.platform !== 'darwin')('binary-create-xcode.sh', () => {
     rmSync(projectPath, { force: true, recursive: true });
   });
 
-  it('should pass the public directory and the version and build of the processed Info.plist, which the device reports', () => {
+  it('should create the binary with the version and build of the processed Info.plist, which the device reports, when the build archives', () => {
     const nodeDirectoryPath = installNode('bin');
 
-    runScript({ PATH: `${nodeDirectoryPath}:/usr/bin:/bin` });
+    runScript({
+      DEPLOYMENT_POSTPROCESSING: 'YES',
+      PATH: `${nodeDirectoryPath}:/usr/bin:/bin`,
+    });
 
     expect(readArguments(nodeDirectoryPath)).toEqual([
       'hotcodepush',
       'binary',
       'create',
-      '--platform',
-      'ios',
-      '--path',
-      join(appPath, 'public'),
       '--binary-version',
       '2.4.1',
       '--binary-build',
       '57',
-      '--out',
+      '--platform',
+      'ios',
+      '--embedded-bundle-path',
+      join(appPath, 'public'),
+      '--resource-file-path',
       join(appPath, 'hotcodepush.json'),
     ]);
   });
 
-  it("should run binary create in the project's directory, two levels above the Xcode project", () => {
+  it('should write the resource file alone when the build does not archive', () => {
+    const nodeDirectoryPath = installNode('bin');
+
+    runScript({
+      DEPLOYMENT_POSTPROCESSING: 'NO',
+      PATH: `${nodeDirectoryPath}:/usr/bin:/bin`,
+    });
+
+    expect(readArguments(nodeDirectoryPath)).toEqual([
+      'hotcodepush',
+      'resource-file',
+      'write',
+      '--platform',
+      'ios',
+      '--embedded-bundle-path',
+      join(appPath, 'public'),
+      '--resource-file-path',
+      join(appPath, 'hotcodepush.json'),
+    ]);
+  });
+
+  it("should run the CLI in the project's directory, two levels above the Xcode project", () => {
     const nodeDirectoryPath = installNode('bin');
 
     runScript({ PATH: `${nodeDirectoryPath}:/usr/bin:/bin` });
@@ -100,7 +124,7 @@ describe.skipIf(process.platform !== 'darwin')('binary-create-xcode.sh', () => {
 
     runScript();
 
-    expect(readArguments(nodeDirectoryPath)).toContain('create');
+    expect(readArguments(nodeDirectoryPath)[0]).toBe('hotcodepush');
   });
 
   it('should take Node from .xcode.env.local over .xcode.env', () => {
@@ -110,7 +134,7 @@ describe.skipIf(process.platform !== 'darwin')('binary-create-xcode.sh', () => {
 
     runScript();
 
-    expect(readArguments(nodeDirectoryPath)).toContain('create');
+    expect(readArguments(nodeDirectoryPath)[0]).toBe('hotcodepush');
   });
 
   it('should find Node through nvm when no .xcode.env names it', () => {
@@ -122,7 +146,7 @@ describe.skipIf(process.platform !== 'darwin')('binary-create-xcode.sh', () => {
 
     runScript();
 
-    expect(readArguments(nodeDirectoryPath)).toContain('create');
+    expect(readArguments(nodeDirectoryPath)[0]).toBe('hotcodepush');
   });
 
   it('should find Node through asdf when no .xcode.env names it', () => {
@@ -130,7 +154,7 @@ describe.skipIf(process.platform !== 'darwin')('binary-create-xcode.sh', () => {
 
     runScript();
 
-    expect(readArguments(nodeDirectoryPath)).toContain('create');
+    expect(readArguments(nodeDirectoryPath)[0]).toBe('hotcodepush');
   });
 
   it('should find Node through Volta when no .xcode.env names it', () => {
@@ -138,7 +162,7 @@ describe.skipIf(process.platform !== 'darwin')('binary-create-xcode.sh', () => {
 
     runScript();
 
-    expect(readArguments(nodeDirectoryPath)).toContain('create');
+    expect(readArguments(nodeDirectoryPath)[0]).toBe('hotcodepush');
   });
 
   it('should find Node through fnm when no .xcode.env names it', () => {
@@ -150,7 +174,7 @@ describe.skipIf(process.platform !== 'darwin')('binary-create-xcode.sh', () => {
 
     runScript();
 
-    expect(readArguments(nodeDirectoryPath)).toContain('create');
+    expect(readArguments(nodeDirectoryPath)[0]).toBe('hotcodepush');
   });
 
   it("should find Node in Homebrew's bin when no .xcode.env names it", () => {
@@ -158,7 +182,7 @@ describe.skipIf(process.platform !== 'darwin')('binary-create-xcode.sh', () => {
 
     runScript();
 
-    expect(readArguments(nodeDirectoryPath)).toContain('create');
+    expect(readArguments(nodeDirectoryPath)[0]).toBe('hotcodepush');
   });
 
   it('should fail naming .xcode.env when no Node is found', () => {
@@ -190,6 +214,7 @@ describe.skipIf(process.platform !== 'darwin')('binary-create-xcode.sh', () => {
     execFileSync('/bin/sh', [SCRIPT_PATH], {
       env: {
         CONFIGURATION_BUILD_DIR: join(projectPath, 'build'),
+        DEPLOYMENT_POSTPROCESSING: 'NO',
         HOME: homePath,
         HOMEBREW_PREFIX: join(projectPath, 'homebrew'),
         INFOPLIST_PATH: join(APP_NAME, 'Info.plist'),

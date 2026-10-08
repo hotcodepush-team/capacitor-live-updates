@@ -1,6 +1,6 @@
 #!/bin/sh
 # The build step of the Xcode build, run by the "Create HotCodePush binary" phase `hotcodepush init` appends to the app
-# target: the CLI's `binary create` writes hotcodepush.json into the app and registers the binary. The phase holds one
+# target: the CLI writes hotcodepush.json into the app and, in a store build, creates the binary. The phase holds one
 # line; what it runs lives here.
 set -e
 
@@ -40,12 +40,6 @@ DEST="$CONFIGURATION_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH"
 # Capacitor's Xcode project sits in ios/App, two levels below the project's package.json and hotcodepush.json.
 PROJECT_ROOT="${PROJECT_ROOT:-$PROJECT_DIR/../..}"
 
-# The identity the device reports, from the built app's processed Info.plist: Capacitor's template expands MARKETING_VERSION
-# and CURRENT_PROJECT_VERSION there, and an app that writes the version and build as literals keeps its own.
-INFO_PLIST="$TARGET_BUILD_DIR/$INFOPLIST_PATH"
-BINARY_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$INFO_PLIST")
-BINARY_BUILD=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$INFO_PLIST")
-
 cd "$PROJECT_ROOT"
 
 # Xcode's PATH has no Node when the build starts in Xcode. React Native's convention names it: NODE_BINARY in .xcode.env
@@ -61,16 +55,27 @@ if [ -z "$NODE_BINARY" ]; then
   NODE_BINARY=$(command -v node || true)
 fi
 if [ -z "$NODE_BINARY" ]; then
-  echo "error: HotCodePush found no Node to run binary create; name it in $PROJECT_DIR/.xcode.env: export NODE_BINARY=/path/to/node" >&2
+  echo "error: HotCodePush found no Node to run its build step; name it in $PROJECT_DIR/.xcode.env: export NODE_BINARY=/path/to/node" >&2
   exit 1
 fi
 # npx sits beside Node.
 PATH="$(dirname "$NODE_BINARY"):$PATH"
 export PATH
 
-npx hotcodepush binary create \
+# Only a store build creates the binary: an archive, the build Xcode's "Run script only when installing" means; every
+# other build writes the resource file alone. The binary's identity is the one the device reports, from the built app's
+# processed Info.plist: Capacitor's template expands MARKETING_VERSION and CURRENT_PROJECT_VERSION there, and an app that
+# writes the version and build as literals keeps its own.
+if [ "$DEPLOYMENT_POSTPROCESSING" = "YES" ]; then
+  INFO_PLIST="$TARGET_BUILD_DIR/$INFOPLIST_PATH"
+  BINARY_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$INFO_PLIST")
+  BINARY_BUILD=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$INFO_PLIST")
+  set -- binary create --binary-version "$BINARY_VERSION" --binary-build "$BINARY_BUILD"
+else
+  set -- resource-file write
+fi
+
+npx hotcodepush "$@" \
   --platform ios \
-  --path "$DEST/public" \
-  --binary-version "$BINARY_VERSION" \
-  --binary-build "$BINARY_BUILD" \
-  --out "$DEST/hotcodepush.json"
+  --embedded-bundle-path "$DEST/public" \
+  --resource-file-path "$DEST/hotcodepush.json"
