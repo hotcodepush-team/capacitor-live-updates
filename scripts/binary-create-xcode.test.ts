@@ -108,6 +108,22 @@ describe.skipIf(process.platform !== 'darwin')('binary-create-xcode.sh', () => {
     ]);
   });
 
+  it("should hash and write into the product Xcode builds when the configuration's directory points elsewhere", () => {
+    const nodeDirectoryPath = installNode('bin');
+
+    runScript({
+      CONFIGURATION_BUILD_DIR: join(projectPath, 'overridden'),
+      PATH: `${nodeDirectoryPath}:/usr/bin:/bin`,
+    });
+
+    expect(readArguments(nodeDirectoryPath).slice(-4)).toEqual([
+      '--embedded-bundle-path',
+      join(appPath, 'public'),
+      '--resource-file-path',
+      join(appPath, 'hotcodepush.json'),
+    ]);
+  });
+
   it("should run the CLI in the project's directory, two levels above the Xcode project", () => {
     const nodeDirectoryPath = installNode('bin');
 

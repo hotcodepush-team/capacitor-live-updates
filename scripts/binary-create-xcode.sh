@@ -36,7 +36,10 @@ add_version_managers_to_path() {
   done
 }
 
-DEST="$CONFIGURATION_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH"
+# The built app, where the target builds its product: an archive installs it apart from the configuration's directory, and
+# a CONFIGURATION_BUILD_DIR given on the command line leaves this one pointing at the real product. The resource file
+# lands beside the app's public directory, never inside the bundle it hashes.
+DEST="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH"
 # Capacitor's Xcode project sits in ios/App, two levels below the project's package.json and hotcodepush.json.
 PROJECT_ROOT="${PROJECT_ROOT:-$PROJECT_DIR/../..}"
 
