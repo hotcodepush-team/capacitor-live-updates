@@ -6,15 +6,15 @@ What the plugin adds to an app, measured on the demo app and guarded from then o
 
 | Number                     | How                                                                                                                                                                                                      |
 | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Binary size added, Android | the unsigned release APK of the demo built with the plugin minus the same build without it, in bytes                                                                                                     |
+| Binary size added, Android | the release APK of the demo, signed with the debug key, built with the plugin minus the same build without it, in bytes                                                                                  |
 | Binary size added, iOS     | the Release simulator `App.app` — every file summed — built with the plugin minus the same build without it, in bytes                                                                                    |
 | Cold start added, Android  | from the activity's start (`ActivityTaskManager: START` in logcat) to the web view's first paint, on the Pixel_9_Pro emulator; the median of five cold launches with the plugin minus the median without |
 | Cold start added, iOS      | from the launch call to the web view's first paint, on an iPhone simulator; the same medians                                                                                                             |
 
 The first paint is the `[baseline] first paint` line both variants log on their first animation frame, read from the web view's console: logcat on Android, the process's stdout on iOS through `simctl launch --console-pty`, since a pipe would buffer it until the process exits.
 Capacitor forwards that console only in debug builds, so the cold starts are measured on debug builds of both variants while the sizes are measured on release builds.
-The "without" variant is the demo with the plugin, its hook, its resource file and the project's reference to it removed, and the screen's script swapped for the same screen with nothing behind it.
-Both variants build offline: `prepare-demo.mjs` sets `HOTCODEPUSH_OFFLINE=1` for everything it runs, so the demo's `binary create` hook writes the resource file without a channel and creates no binary — a benchmark build is never shipped, needs no token on a runner and must not register a store build from a machine that holds one.
+The "without" variant is the demo with the plugin, its Xcode phase and its Gradle line removed, and the screen's script swapped for the same screen with nothing behind it.
+Both variants build offline: `measure-size.mjs` and `measure-cold-start.mjs` set `HOTCODEPUSH_OFFLINE=1` for the native builds, whose build step writes the resource file without a channel and, in the release build, creates no binary — a benchmark build is never shipped, needs no token on a runner and must not create a store build's binary from a machine that holds one.
 
 ## Where the bytes sit
 
