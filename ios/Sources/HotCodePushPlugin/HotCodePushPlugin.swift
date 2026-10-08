@@ -201,9 +201,9 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
     /// Each stage's strategy for this call; a value outside its choices is a programming mistake and rejects the call.
     static func syncOptions(from call: CAPPluginCall) throws -> SyncOptions {
         return SyncOptions(
+            applyStrategy: try option("applyStrategy", call.getString("applyStrategy"), ApplyStrategy.init(rawValue:)),
             downloadStrategy: try option("downloadStrategy", call.getString("downloadStrategy"), DownloadStrategy.init(rawValue:)),
-            installStrategy: try option("installStrategy", call.getString("installStrategy"), InstallStrategy.init(rawValue:)),
-            mandatoryInstallStrategy: try option("mandatoryInstallStrategy", call.getString("mandatoryInstallStrategy"), MandatoryInstallStrategy.init(rawValue:)))
+            mandatoryApplyStrategy: try option("mandatoryApplyStrategy", call.getString("mandatoryApplyStrategy"), MandatoryApplyStrategy.init(rawValue:)))
     }
 
     private static func option<T>(_ name: String, _ raw: String?, _ parse: (String) -> T?) throws -> T? {
@@ -310,8 +310,8 @@ extension HotCodePushPlugin: CoreListener {
     }
 
     /// Retained until the page listens: the event belongs to the page the rollback reloads into.
-    public func rolledBack(_ event: RolledBackEvent) {
-        deliver("rolledBack", event, retainUntilConsumed: true)
+    public func updateRolledBack(_ event: UpdateRolledBackEvent) {
+        deliver("updateRolledBack", event, retainUntilConsumed: true)
     }
 
     private func deliver<T: Encodable>(_ eventName: String, _ event: T, retainUntilConsumed: Bool = false) {

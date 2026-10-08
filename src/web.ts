@@ -1,9 +1,9 @@
 import { WebPlugin } from '@capacitor/core';
 
 import type {
-  ApplyResult,
-  CheckResult,
-  DownloadResult,
+  ApplyUpdateResult,
+  CheckForUpdateResult,
+  DownloadUpdateResult,
   GetChannelResult,
   GetDeviceResult,
   GetStateResult,
@@ -22,17 +22,17 @@ export class HotCodePushWeb extends WebPlugin implements HotCodePushPlugin {
     source: 'config',
   };
 
-  async applyUpdate(): Promise<ApplyResult> {
+  async applyUpdate(): Promise<ApplyUpdateResult> {
     return { status: 'NOTHING_TO_APPLY', release: null };
   }
 
-  async checkForUpdate(): Promise<CheckResult> {
+  async checkForUpdate(): Promise<CheckForUpdateResult> {
     return { status: 'UP_TO_DATE', release: null };
   }
 
   async clearUpdates(): Promise<void> {}
 
-  async downloadUpdate(): Promise<DownloadResult> {
+  async downloadUpdate(): Promise<DownloadUpdateResult> {
     return { status: 'UP_TO_DATE', release: null };
   }
 

@@ -25,13 +25,13 @@ class PageEventsTest {
     @Test
     fun shouldHoldEveryEventForTheNextPageAndRetainItThereWhenALoadIsPending() {
         pageEvents.holdUntilNextPage()
-        pageEvents.deliver("rolledBack", event("r2"), retainUntilConsumed = true)
+        pageEvents.deliver("updateRolledBack", event("r2"), retainUntilConsumed = true)
         pageEvents.deliver("updateAvailable", event("r3"), retainUntilConsumed = false)
         assertEquals(emptyList<Triple<String, String, Boolean>>(), notified)
 
         pageEvents.releaseToPage()
 
-        assertEquals(listOf(Triple("rolledBack", "r2", true), Triple("updateAvailable", "r3", true)), notified)
+        assertEquals(listOf(Triple("updateRolledBack", "r2", true), Triple("updateAvailable", "r3", true)), notified)
         assertFalse(pageEvents.isPageLoadPending)
     }
 

@@ -13,6 +13,7 @@ import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.WebViewListener
 import com.getcapacitor.annotation.CapacitorPlugin
+import com.hotcodepush.core.ApplyStrategy
 import com.hotcodepush.core.ChannelChoice
 import com.hotcodepush.core.Clock
 import com.hotcodepush.core.Configuration
@@ -22,12 +23,10 @@ import com.hotcodepush.core.DebugScreen
 import com.hotcodepush.core.DeviceFacts
 import com.hotcodepush.core.DownloadStrategy
 import com.hotcodepush.core.FileStore
-import com.hotcodepush.core.InstallStrategy
 import com.hotcodepush.core.KeyValueStore
-import com.hotcodepush.core.MandatoryInstallStrategy
+import com.hotcodepush.core.MandatoryApplyStrategy
 import com.hotcodepush.core.OkHttpClientAdapter
 import com.hotcodepush.core.PlainException
-import com.hotcodepush.core.RolledBackEvent
 import com.hotcodepush.core.ScheduledTask
 import com.hotcodepush.core.Scheduler
 import com.hotcodepush.core.SyncOptions
@@ -35,6 +34,7 @@ import com.hotcodepush.core.SyncTrigger
 import com.hotcodepush.core.UpdateAvailableEvent
 import com.hotcodepush.core.UpdateDownloadedEvent
 import com.hotcodepush.core.UpdateFailedEvent
+import com.hotcodepush.core.UpdateRolledBackEvent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -228,9 +228,9 @@ class HotCodePushPlugin : Plugin(), CoreListener {
 
     /** Each stage's strategy for this call; a value outside its choices is a programming mistake and rejects the call. */
     private fun syncOptions(call: PluginCall) = SyncOptions(
+        applyStrategy = option("applyStrategy", call.getString("applyStrategy"), ApplyStrategy::fromWire),
         downloadStrategy = option("downloadStrategy", call.getString("downloadStrategy"), DownloadStrategy::fromWire),
-        installStrategy = option("installStrategy", call.getString("installStrategy"), InstallStrategy::fromWire),
-        mandatoryInstallStrategy = option("mandatoryInstallStrategy", call.getString("mandatoryInstallStrategy"), MandatoryInstallStrategy::fromWire),
+        mandatoryApplyStrategy = option("mandatoryApplyStrategy", call.getString("mandatoryApplyStrategy"), MandatoryApplyStrategy::fromWire),
     )
 
     private fun <T> option(name: String, raw: String?, parse: (String?) -> T?): T? {
@@ -283,7 +283,7 @@ class HotCodePushPlugin : Plugin(), CoreListener {
     }
 
     /** Retained until the page listens: the event belongs to the page the rollback reloads into. */
-    override fun rolledBack(event: RolledBackEvent) = deliver("rolledBack", JSObject.fromJSONObject(event.toJson()), retainUntilConsumed = true)
+    override fun updateRolledBack(event: UpdateRolledBackEvent) = deliver("updateRolledBack", JSObject.fromJSONObject(event.toJson()), retainUntilConsumed = true)
 
     /** On the main thread, in order behind the reload the loader starts there, so an event that follows a reload waits for its page. */
     private fun deliver(eventName: String, data: JSObject, retainUntilConsumed: Boolean = false) {

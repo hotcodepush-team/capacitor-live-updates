@@ -25,18 +25,18 @@ class HotCodePushPluginTest {
 
     @Test
     fun shouldThrowTheReadersErrorWhenTheCoreRefusesTheResourceFile() {
-        val context = contextWithResourceFile(resourceFile(checkInterval = 30))
+        val context = contextWithResourceFile(resourceFile(checkIntervalSeconds = 30))
 
         val exception = assertThrows(JSONException::class.java) { HotCodePushPlugin.readConfiguration(context) }
 
-        assertEquals("checkInterval is below its floor of 60.0 seconds: 30.0", exception.message)
+        assertEquals("checkIntervalSeconds is below its floor of 60.0 seconds: 30.0", exception.message)
     }
 
     @Test
     fun shouldReadTheConfigurationWhenTheResourceFileIsValid() {
-        val context = contextWithResourceFile(resourceFile(checkInterval = 60))
+        val context = contextWithResourceFile(resourceFile(checkIntervalSeconds = 60))
 
-        assertEquals(60.0, HotCodePushPlugin.readConfiguration(context)?.checkInterval)
+        assertEquals(60.0, HotCodePushPlugin.readConfiguration(context)?.checkIntervalSeconds)
     }
 
     private fun contextWithResourceFile(text: String): Context {
@@ -47,6 +47,6 @@ class HotCodePushPluginTest {
         return context
     }
 
-    private fun resourceFile(checkInterval: Int) =
-        """{"appId":"0b6d5c1e-2f3a-4b5c-8d9e-0f1a2b3c4d5e","channelId":null,"checkInterval":$checkInterval,"builtAt":"2026-10-08T00:00:00.000Z","fingerprint":null,"embeddedBundleManifest":null}"""
+    private fun resourceFile(checkIntervalSeconds: Int) =
+        """{"appId":"0b6d5c1e-2f3a-4b5c-8d9e-0f1a2b3c4d5e","channelId":null,"checkIntervalSeconds":$checkIntervalSeconds,"builtAt":"2026-10-08T00:00:00.000Z","fingerprint":null,"embeddedBundleManifest":null}"""
 }
