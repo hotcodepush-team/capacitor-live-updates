@@ -22,6 +22,8 @@ if (!target || (!androidSerial && !iosUdid)) {
   process.exit(2);
 }
 const bundleId = 'com.hotcodepush.demo.capacitor';
+// A benchmark build is never shipped: offline, the build step writes the resource file without a channel.
+const env = { ...process.env, HOTCODEPUSH_OFFLINE: '1' };
 const marker = '[baseline] first paint';
 
 const result = {};
@@ -33,6 +35,7 @@ async function measureAndroid() {
   const apk = join(target, 'android/app/build/outputs/apk/debug/app-debug.apk');
   execFileSync('./gradlew', ['assembleDebug', '--console=plain', '-q'], {
     cwd: join(target, 'android'),
+    env,
     stdio: ['ignore', 'ignore', 'inherit'],
   });
   adb('install', '-r', apk);
@@ -83,7 +86,7 @@ async function measureIos() {
       '-quiet',
       'build',
     ],
-    { stdio: ['ignore', 'ignore', 'inherit'] },
+    { env, stdio: ['ignore', 'ignore', 'inherit'] },
   );
   simctl(
     'install',
