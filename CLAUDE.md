@@ -14,6 +14,8 @@ src/                                             definitions.ts (the plugin inte
 ios/Sources/HotCodePushPlugin                    the Capacitor plugin and the bundle loader over HotCodePushCore
 android/src/main/java/com/hotcodepush/capacitor  the Capacitor plugin, the bundle loader over com.hotcodepush:core-android and PageEvents, which holds the events of a reload for the page that follows it
 android/src/test                                 the plugin's unit tests on Robolectric, which verify:android runs
+android/hotcodepush.gradle                       the Gradle build step, a task per variant the app applies from its build.gradle
+scripts/                                         the Xcode build step's script, with the Node lookup, and its tests
 ```
 
 The native cores live in `core-ios` and `core-android`, consumed at pinned commits: `Package.swift` by `revision`, the pod through the consumer's Podfile by `:git` and `:commit`, the Android module from core-android's `maven` branch by full sha, which `android/build.gradle` adds to every project of the app's build; a core change lands there first and arrives here as a bump of the pin.
@@ -26,6 +28,7 @@ The plugin layer keeps the bundle loader, the readiness signal and the bridge, n
 | `npm run lint`                         | ESLint, Prettier and SwiftLint                   |
 | `npm run build`                        | the TypeScript into `dist/`                      |
 | `npm run verify:ios`, `verify:android` | the platform builds, Android with its unit tests |
+| `npm test`                             | the Xcode build step's script tests, macOS only  |
 
 Run `npm run fmt` before every commit.
 

@@ -13,7 +13,8 @@ npx cap sync
 
 A consumer pins a commit and bumps it deliberately; the preview comment on each commit names its `<sha>`.
 
-The plugin reads `hotcodepush.json` from the app's resources, which `npx hotcodepush init` writes and the build step, `binary create` from the `capacitor:copy:after` hook, carries into every native build.
+The plugin reads `hotcodepush.json` from the app's resources, written into the built app by the build step `npx hotcodepush init` wires into the native builds: an Xcode phase "Create HotCodePush binary" that runs this package's `scripts/binary-create-xcode.sh`, and an `apply from` of `android/hotcodepush.gradle` in `android/app/build.gradle`. Every build writes the file; an Xcode archive or a Gradle release variant also creates the store build's binary in HotCodePush, so a store build needs a login or `HOTCODEPUSH_TOKEN`.
+The Xcode phase needs Node: name it in `ios/App/.xcode.env` as `export NODE_BINARY=…`, `.xcode.env.local` overriding, else nvm, fnm, Volta, asdf and Homebrew are searched, and a build without any fails naming the fix.
 
 The native cores are the Swift package `HotCodePushCore` and the Android library `com.hotcodepush:core-android`, each pinned to a commit until it is published. Swift Package Manager, Capacitor's default on iOS, resolves the pinned revision on its own. A CocoaPods app pins the commit `Package.swift` names in its Podfile:
 
@@ -36,7 +37,7 @@ if (result.status === 'DOWNLOADED') {
 }
 ```
 
-With `autoCheck` on, the default, the SDK checks on start, on resume and while the app stays in the foreground, and what follows a check is the download and install strategies' business; `sync()` is for the moment you want an update now. An app that asks before downloading sets `downloadStrategy` to `manual` and calls `downloadUpdate()` on `updateAvailable`; one that protects a flow sets `installStrategy` to `manual` and calls `applyUpdate()` when it is ready.
+With `checkStrategy` at `auto`, the default, the SDK checks on start, on resume and while the app stays in the foreground, and what follows a check is the download and apply strategies' business; `sync()` runs one such cycle when you want an update now, and with `checkStrategy` at `manual` it is the only way a cycle starts. An app that asks before downloading sets `downloadStrategy` to `manual` and calls `downloadUpdate()` on `updateAvailable`, naming the apply strategies for that cycle if it wants; one that protects a flow sets `applyStrategy` to `manual` and calls `applyUpdate()` when it is ready.
 
 ## Documentation
 
@@ -51,6 +52,7 @@ npm run lint
 npm run build
 npm run verify:ios       # the iOS build
 npm run verify:android   # the Android build and its unit tests
+npm test                 # the Xcode build step's script tests, macOS only
 ```
 
 The cores and their tests live in [core-ios](https://github.com/hotcodepush-team/core-ios) and [core-android](https://github.com/hotcodepush-team/core-android).
