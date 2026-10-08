@@ -31,8 +31,8 @@ On Android the plugin keeps its store out of device backups and transfers: its m
 import { HotCodePush } from '@hotcodepush/capacitor-live-updates';
 
 const result = await HotCodePush.sync();
-if (result.status === 'UPDATED') {
-  console.log(`release #${result.release.number} installs ${result.installAt}`);
+if (result.status === 'DOWNLOADED') {
+  console.log(`release #${result.release.number} applies at ${result.applyAt}`);
 }
 ```
 
