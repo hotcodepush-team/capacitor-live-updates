@@ -22,6 +22,7 @@ import com.hotcodepush.core.CoreListener
 import com.hotcodepush.core.DebugScreen
 import com.hotcodepush.core.DeviceFacts
 import com.hotcodepush.core.DownloadStrategy
+import com.hotcodepush.core.DownloadUpdateOptions
 import com.hotcodepush.core.FileStore
 import com.hotcodepush.core.KeyValueStore
 import com.hotcodepush.core.MandatoryApplyStrategy
@@ -147,7 +148,15 @@ class HotCodePushPlugin : Plugin(), CoreListener {
     fun clearUpdates(call: PluginCall) = runVoid(call) { it.clearUpdates() }
 
     @PluginMethod
-    fun downloadUpdate(call: PluginCall) = run(call) { it.downloadUpdate().toJson() }
+    fun downloadUpdate(call: PluginCall) {
+        val options = try {
+            downloadUpdateOptions(call)
+        } catch (exception: PlainException) {
+            call.reject(exception.message)
+            return
+        }
+        run(call) { it.downloadUpdate(options).toJson() }
+    }
 
     @PluginMethod
     fun getChannel(call: PluginCall) = run(call) { it.channel().toJson() }
@@ -230,6 +239,12 @@ class HotCodePushPlugin : Plugin(), CoreListener {
     private fun syncOptions(call: PluginCall) = SyncOptions(
         applyStrategy = option("applyStrategy", call.getString("applyStrategy"), ApplyStrategy::fromWire),
         downloadStrategy = option("downloadStrategy", call.getString("downloadStrategy"), DownloadStrategy::fromWire),
+        mandatoryApplyStrategy = option("mandatoryApplyStrategy", call.getString("mandatoryApplyStrategy"), MandatoryApplyStrategy::fromWire),
+    )
+
+    /** The apply strategies for this call, the download pinned to `auto`; a value outside its choices rejects the call. */
+    private fun downloadUpdateOptions(call: PluginCall) = DownloadUpdateOptions(
+        applyStrategy = option("applyStrategy", call.getString("applyStrategy"), ApplyStrategy::fromWire),
         mandatoryApplyStrategy = option("mandatoryApplyStrategy", call.getString("mandatoryApplyStrategy"), MandatoryApplyStrategy::fromWire),
     )
 

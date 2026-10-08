@@ -109,7 +109,12 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func downloadUpdate(_ call: CAPPluginCall) {
-        run(call) { core in try await core.downloadUpdate() }
+        do {
+            let options = try HotCodePushPlugin.downloadUpdateOptions(from: call)
+            run(call) { core in try await core.downloadUpdate(options: options) }
+        } catch {
+            call.reject(error.localizedDescription)
+        }
     }
 
     @objc func getChannel(_ call: CAPPluginCall) {
@@ -203,6 +208,13 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
         return SyncOptions(
             applyStrategy: try option("applyStrategy", call.getString("applyStrategy"), ApplyStrategy.init(rawValue:)),
             downloadStrategy: try option("downloadStrategy", call.getString("downloadStrategy"), DownloadStrategy.init(rawValue:)),
+            mandatoryApplyStrategy: try option("mandatoryApplyStrategy", call.getString("mandatoryApplyStrategy"), MandatoryApplyStrategy.init(rawValue:)))
+    }
+
+    /// The apply strategies for this call, the download pinned to `auto`; a value outside its choices rejects the call.
+    static func downloadUpdateOptions(from call: CAPPluginCall) throws -> DownloadUpdateOptions {
+        return DownloadUpdateOptions(
+            applyStrategy: try option("applyStrategy", call.getString("applyStrategy"), ApplyStrategy.init(rawValue:)),
             mandatoryApplyStrategy: try option("mandatoryApplyStrategy", call.getString("mandatoryApplyStrategy"), MandatoryApplyStrategy.init(rawValue:)))
     }
 

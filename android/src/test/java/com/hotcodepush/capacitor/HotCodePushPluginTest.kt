@@ -2,6 +2,7 @@ package com.hotcodepush.capacitor
 
 import android.content.Context
 import android.content.res.AssetManager
+import com.getcapacitor.PluginCall
 import org.json.JSONException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -10,11 +11,12 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.Mockito.`when`
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.verify
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
-/** The resource file as the plugin reads it from the app's assets: missing, refused by the core's reader, or read. */
+/** The resource file as the plugin reads it from the app's assets, missing, refused by the core's reader or read, and a call's options. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class HotCodePushPluginTest {
@@ -37,6 +39,16 @@ class HotCodePushPluginTest {
         val context = contextWithResourceFile(resourceFile(checkIntervalSeconds = 60))
 
         assertEquals(60.0, HotCodePushPlugin.readConfiguration(context)?.checkIntervalSeconds)
+    }
+
+    @Test
+    fun shouldRejectTheDownloadWhenItsApplyStrategyIsNotOneOfItsChoices() {
+        val call = mock(PluginCall::class.java)
+        `when`(call.getString("applyStrategy")).thenReturn("later")
+
+        HotCodePushPlugin().downloadUpdate(call)
+
+        verify(call).reject("applyStrategy is not one of its choices: later")
     }
 
     private fun contextWithResourceFile(text: String): Context {
