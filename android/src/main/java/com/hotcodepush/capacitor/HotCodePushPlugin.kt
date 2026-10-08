@@ -71,7 +71,7 @@ class HotCodePushPlugin : Plugin(), CoreListener {
         val configuration = try {
             readConfiguration(context)
         } catch (exception: Exception) {
-            notConfiguredMessage = "HotCodePush is not configured: hotcodepush.json was refused: ${exception.message}"
+            notConfiguredMessage = "HotCodePush is not configured: the app's hotcodepush.json was refused: ${exception.message}. Check the project's hotcodepush.json and build the app again."
             null
         }
         if (configuration == null) {

@@ -43,7 +43,7 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
         do {
             configuration = try HotCodePushPlugin.readConfiguration()
         } catch {
-            notConfiguredMessage = "HotCodePush is not configured: hotcodepush.json was refused: \(HotCodePushPlugin.describeRefusal(error))"
+            notConfiguredMessage = "HotCodePush is not configured: the app's hotcodepush.json was refused: \(HotCodePushPlugin.describeRefusal(error)). Check the project's hotcodepush.json and build the app again."
             configuration = nil
         }
         guard let configuration = configuration, let bridge = bridge else {
