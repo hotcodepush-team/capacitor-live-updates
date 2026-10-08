@@ -1,0 +1,58 @@
+// The build step of the Android build. The app's build.gradle applies this file with the one line `hotcodepush init`
+// adds; for every variant, the task below runs the CLI's `binary create` over the web assets `npx cap sync` copied into
+// the app, which writes hotcodepush.json into the variant's assets and registers the binary.
+
+import javax.inject.Inject
+import org.apache.tools.ant.taskdefs.condition.Os
+
+abstract class HotCodePushBinaryCreateTask extends DefaultTask {
+    @Input
+    abstract Property<String> getBinaryBuild()
+
+    @Input
+    abstract Property<String> getBinaryVersion()
+
+    @InputDirectory
+    abstract DirectoryProperty getEmbeddedAssetsDirectory()
+
+    @OutputDirectory
+    abstract DirectoryProperty getOutputDirectory()
+
+    @Internal
+    abstract DirectoryProperty getProjectRoot()
+
+    @Inject
+    abstract ExecOperations getExecOperations()
+
+    @TaskAction
+    void createBinary() {
+        def npx = Os.isFamily(Os.FAMILY_WINDOWS) ? ['cmd', '/c', 'npx'] : ['npx']
+        execOperations.exec {
+            it.workingDir = projectRoot.get().asFile
+            it.commandLine(npx + [
+                'hotcodepush', 'binary', 'create',
+                '--platform', 'android',
+                '--path', embeddedAssetsDirectory.get().asFile.path,
+                '--binary-version', binaryVersion.get(),
+                '--binary-build', binaryBuild.get(),
+                '--out', outputDirectory.file('hotcodepush.json').get().asFile.path,
+            ])
+        }
+    }
+}
+
+androidComponents.onVariants(androidComponents.selector().all()) { variant ->
+    def binaryCreateTask = tasks.register("createHotCodePushBinary${variant.name.capitalize()}", HotCodePushBinaryCreateTask) {
+        it.group = 'hotcodepush'
+        it.description = "Writes hotcodepush.json into the ${variant.name} assets and registers the binary."
+        it.binaryBuild.set(variant.outputs[0].versionCode.map { String.valueOf(it) })
+        it.binaryVersion.set(variant.outputs[0].versionName)
+        // Where `npx cap sync` copies the web build: Capacitor's assets serve every variant from src/main.
+        it.embeddedAssetsDirectory.set(layout.projectDirectory.dir('src/main/assets/public'))
+        // Capacitor's Android project sits in android/, one level below the project's package.json and hotcodepush.json.
+        it.projectRoot.set(rootProject.layout.projectDirectory.dir('..'))
+        // The resource file carries the build's time as the floor and the registration is per build: the step never counts as up to date.
+        it.outputs.upToDateWhen { false }
+    }
+    variant.sources.assets.addGeneratedSourceDirectory(binaryCreateTask) { it.outputDirectory }
+}

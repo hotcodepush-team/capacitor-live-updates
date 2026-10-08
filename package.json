@@ -30,8 +30,11 @@
     "android/src/main/",
     "android/build.gradle",
     "android/consumer-rules.pro",
+    "android/hotcodepush.gradle",
     "dist/",
     "ios/Sources/",
+    "scripts/",
+    "!scripts/*.test.ts",
     "HotcodepushCapacitorLiveUpdates.podspec",
     "Package.swift"
   ],
@@ -40,7 +43,8 @@
     "clean": "rimraf ./dist",
     "fmt": "eslint . --fix && prettier --write . && swiftlint --fix --quiet ios",
     "lint": "eslint . && prettier --check . && swiftlint lint --quiet --strict ios",
-    "verify": "npm run lint && npm run build",
+    "test": "vitest run",
+    "verify": "npm run lint && npm test && npm run build",
     "verify:android": "cd android && ./gradlew build --console=plain",
     "verify:ios": "xcodebuild -scheme HotcodepushCapacitorLiveUpdates -destination generic/platform=iOS -quiet build"
   },
@@ -57,7 +61,8 @@
     "rimraf": "6.1.2",
     "rollup": "4.53.3",
     "typescript": "5.9.3",
-    "typescript-eslint": "8.70.0"
+    "typescript-eslint": "8.70.0",
+    "vitest": "5.0.1"
   },
   "peerDependencies": {
     "@capacitor/core": ">=7.0.0"

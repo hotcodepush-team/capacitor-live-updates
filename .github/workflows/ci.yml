@@ -54,6 +54,8 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      # The Xcode build step's tests run on macOS alone, where PlistBuddy is.
+      - run: npm test
       - run: brew install swiftlint
       - run: swiftlint lint --quiet --strict ios
       - run: xcodebuild -scheme HotcodepushCapacitorLiveUpdates -destination generic/platform=iOS -quiet build
