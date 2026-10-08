@@ -15,14 +15,14 @@ abstract class HotCodePushBinaryCreateTask extends DefaultTask {
     @InputDirectory
     abstract DirectoryProperty getEmbeddedAssetsDirectory()
 
-    @Input
-    abstract Property<Boolean> getIsStoreBuild()
-
     @OutputDirectory
     abstract DirectoryProperty getOutputDirectory()
 
     @Internal
     abstract DirectoryProperty getProjectRoot()
+
+    @Input
+    abstract Property<Boolean> getStoreBuild()
 
     @Inject
     abstract ExecOperations getExecOperations()
@@ -30,7 +30,7 @@ abstract class HotCodePushBinaryCreateTask extends DefaultTask {
     @TaskAction
     void createBinary() {
         def npx = Os.isFamily(Os.FAMILY_WINDOWS) ? ['cmd', '/c', 'npx'] : ['npx']
-        def command = isStoreBuild.get()
+        def command = storeBuild.get()
             ? ['binary', 'create', '--binary-version', binaryVersion.get(), '--binary-build', binaryBuild.get()]
             : ['resource-file', 'write']
         execOperations.exec {
@@ -53,10 +53,10 @@ androidComponents.onVariants(androidComponents.selector().all()) { variant ->
         // Where `npx cap sync` copies the web build: Capacitor's assets serve every variant from src/main.
         it.embeddedAssetsDirectory.set(layout.projectDirectory.dir('src/main/assets/public'))
         // Only a store build creates the binary: a build type other than debug.
-        it.isStoreBuild.set(variant.buildType != 'debug')
+        it.storeBuild.set(variant.buildType != 'debug')
         // Capacitor's Android project sits in android/, one level below the project's package.json and hotcodepush.json.
         it.projectRoot.set(rootProject.layout.projectDirectory.dir('..'))
-        // The resource file carries the build's time as the floor and the binary is created per build: the step never counts as up to date.
+        // The resource file carries the build's time as the floor and a store build creates its binary on every run: the step never counts as up to date.
         it.outputs.upToDateWhen { false }
     }
     variant.sources.assets.addGeneratedSourceDirectory(binaryCreateTask) { it.outputDirectory }
