@@ -28,17 +28,26 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "sync", returnType: CAPPluginReturnPromise)
     ]
 
-    private static let notConfiguredMessage = "HotCodePush is not configured: hotcodepush.json is missing from the app's resources. Run `npx hotcodepush init` and build the app once."
+    private static let missingConfigurationMessage = "HotCodePush is not configured: hotcodepush.json is missing from the app's resources. Run `npx hotcodepush init` and build the app once."
 
     private var core: Core?
     private var loader: CapacitorBundleLoader?
+    /// Why every method rejects while the core is absent: the resource file is missing, or the core's reader refused it.
+    private var notConfiguredMessage = HotCodePushPlugin.missingConfigurationMessage
     private lazy var pageEvents = PageEvents(plugin: self)
 
     /// Runs inside Capacitor's bridge, before its view controller loads the WebView: the start decides the bundle the first load
     /// serves, waiting for the core at most its bound, so the WebView never loads a bundle the start replaces.
     override public func load() {
-        guard let configuration = HotCodePushPlugin.readConfiguration(), let bridge = bridge else {
-            CAPLog.print("[HotCodePush] ", HotCodePushPlugin.notConfiguredMessage)
+        let configuration: Configuration?
+        do {
+            configuration = try HotCodePushPlugin.readConfiguration()
+        } catch {
+            notConfiguredMessage = "HotCodePush is not configured: hotcodepush.json was refused: \(HotCodePushPlugin.describeRefusal(error))"
+            configuration = nil
+        }
+        guard let configuration = configuration, let bridge = bridge else {
+            CAPLog.print("[HotCodePush] ", notConfiguredMessage)
             return
         }
         let loader = CapacitorBundleLoader(bridge: bridge) { [weak self] in
@@ -167,7 +176,7 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
     /// The shared core's debug screen, presented over the bridge's view controller.
     @objc func showDebugScreen(_ call: CAPPluginCall) {
         guard let core = core else {
-            call.reject(HotCodePushPlugin.notConfiguredMessage)
+            call.reject(notConfiguredMessage)
             return
         }
         DispatchQueue.main.async { [weak self] in
@@ -205,7 +214,7 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
 
     private func run<T: Encodable>(_ call: CAPPluginCall, _ body: @escaping (Core) async throws -> T) {
         guard let core = core else {
-            call.reject(HotCodePushPlugin.notConfiguredMessage)
+            call.reject(notConfiguredMessage)
             return
         }
         Task {
@@ -219,7 +228,7 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
 
     private func runVoid(_ call: CAPPluginCall, _ body: @escaping (Core) async throws -> Void) {
         guard let core = core else {
-            call.reject(HotCodePushPlugin.notConfiguredMessage)
+            call.reject(notConfiguredMessage)
             return
         }
         Task {
@@ -242,15 +251,21 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
 
     // MARK: The platform's facts
 
-    static func readConfiguration() -> Configuration? {
-        guard let url = Bundle.main.url(forResource: "hotcodepush", withExtension: "json"), let data = try? Data(contentsOf: url) else {
+    /// The resource file the core reads, `nil` when the app's resources lack it; a file the core's reader refuses throws its error.
+    static func readConfiguration() throws -> Configuration? {
+        guard let url = Bundle.main.url(forResource: "hotcodepush", withExtension: "json") else {
             return nil
         }
-        do {
-            return try Configuration.decode(data)
-        } catch {
-            CAPLog.print("[HotCodePush] hotcodepush.json could not be read: \(error)")
-            return nil
+        return try Configuration.decode(Data(contentsOf: url))
+    }
+
+    /// The reader's own message: a decoding error's `localizedDescription` hides it behind a generic sentence.
+    static func describeRefusal(_ error: Error) -> String {
+        switch error as? DecodingError {
+        case .dataCorrupted(let context)?, .keyNotFound(_, let context)?, .typeMismatch(_, let context)?, .valueNotFound(_, let context)?:
+            return context.debugDescription
+        default:
+            return error.localizedDescription
         }
     }
 

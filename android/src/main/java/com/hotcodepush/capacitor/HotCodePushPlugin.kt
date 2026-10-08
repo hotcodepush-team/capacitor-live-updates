@@ -42,6 +42,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.io.File
+import java.io.FileNotFoundException
 
 @CapacitorPlugin(name = "HotCodePush")
 class HotCodePushPlugin : Plugin(), CoreListener {
@@ -51,6 +52,9 @@ class HotCodePushPlugin : Plugin(), CoreListener {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mainHandler = Handler(Looper.getMainLooper())
     private val pageEvents = PageEvents { eventName, data, retainUntilConsumed -> notifyListeners(eventName, data, retainUntilConsumed) }
+
+    /** Why every method rejects while the core is absent: the resource file is missing, or the core's reader refused it. */
+    private var notConfiguredMessage = MISSING_CONFIGURATION_MESSAGE
 
     /** Hears each page the WebView begins in its main frame, after the bridge dropped the listeners of the one before. */
     private val pageStartListener = object : WebViewListener() {
@@ -64,9 +68,14 @@ class HotCodePushPlugin : Plugin(), CoreListener {
      * serves, waiting for the core at most its bound, so the WebView never loads a bundle the start replaces.
      */
     override fun load() {
-        val configuration = readConfiguration(context)
+        val configuration = try {
+            readConfiguration(context)
+        } catch (exception: Exception) {
+            notConfiguredMessage = "HotCodePush is not configured: hotcodepush.json was refused: ${exception.message}"
+            null
+        }
         if (configuration == null) {
-            Logger.error(TAG, NOT_CONFIGURED_MESSAGE, null)
+            Logger.error(TAG, notConfiguredMessage, null)
             return
         }
         val loader = CapacitorBundleLoader(context, bridge) { pageEvents.holdUntilNextPage() }
@@ -199,7 +208,7 @@ class HotCodePushPlugin : Plugin(), CoreListener {
     fun showDebugScreen(call: PluginCall) {
         val core = core
         if (core == null) {
-            call.reject(NOT_CONFIGURED_MESSAGE)
+            call.reject(notConfiguredMessage)
             return
         }
         DebugScreen.show(activity, core)
@@ -232,7 +241,7 @@ class HotCodePushPlugin : Plugin(), CoreListener {
     private fun run(call: PluginCall, body: suspend (Core) -> JSONObject) {
         val core = core
         if (core == null) {
-            call.reject(NOT_CONFIGURED_MESSAGE)
+            call.reject(notConfiguredMessage)
             return
         }
         scope.launch {
@@ -247,7 +256,7 @@ class HotCodePushPlugin : Plugin(), CoreListener {
     private fun runVoid(call: PluginCall, body: suspend (Core) -> Unit) {
         val core = core
         if (core == null) {
-            call.reject(NOT_CONFIGURED_MESSAGE)
+            call.reject(notConfiguredMessage)
             return
         }
         scope.launch {
@@ -284,15 +293,19 @@ class HotCodePushPlugin : Plugin(), CoreListener {
     companion object {
         const val TAG = "HotCodePush"
         const val SDK_VERSION = "0.0.0"
-        const val NOT_CONFIGURED_MESSAGE = "HotCodePush is not configured: hotcodepush.json is missing from the app's assets. Run `npx hotcodepush init` and build the app once."
+        const val MISSING_CONFIGURATION_MESSAGE = "HotCodePush is not configured: hotcodepush.json is missing from the app's assets. Run `npx hotcodepush init` and build the app once."
 
         /** The default `SharedPreferences`, the file `PreferenceManager.getDefaultSharedPreferences` names, without the dependency. */
         fun defaultPreferencesName(context: Context) = "${context.packageName}_preferences"
 
-        fun readConfiguration(context: Context): Configuration? = try {
-            context.assets.open("hotcodepush.json").bufferedReader().use { Configuration.decode(it.readText()) }
-        } catch (exception: Exception) {
-            null
+        /** The resource file the core reads, null when the app's assets lack it; a file the core's reader refuses throws its error. */
+        fun readConfiguration(context: Context): Configuration? {
+            val text = try {
+                context.assets.open("hotcodepush.json").bufferedReader().use { it.readText() }
+            } catch (exception: FileNotFoundException) {
+                return null
+            }
+            return Configuration.decode(text)
         }
 
         fun deviceFacts(context: Context): DeviceFacts {
