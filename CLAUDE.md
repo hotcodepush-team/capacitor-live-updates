@@ -12,7 +12,7 @@ When code and plan disagree, stop and surface it; never improvise.
 ```
 src/                                             definitions.ts (the plugin interface), index.ts, web.ts (the no-op)
 ios/Sources/HotCodePushPlugin                    the Capacitor plugin and the bundle loader over HotCodePushCore
-android/src/main/java/com/hotcodepush/capacitor  the Capacitor plugin, the bundle loader over com.hotcodepush:core-android and PageEvents, which holds the events of a reload for the page that follows it
+android/src/main/java/com/hotcodepush/capacitor  the Capacitor plugin, the bundle loader over com.hotcodepush:core-android and PageEvents, which holds the events of a reload the SDK performs for the page that follows it
 android/src/test                                 the plugin's unit tests on Robolectric, which verify:android runs
 android/hotcodepush.gradle                       the Gradle build step, a task per variant the app applies from its build.gradle
 scripts/                                         the Xcode build step's script, with the Node lookup, and its tests
@@ -47,7 +47,8 @@ The shared types come from `@hotcodepush/protocol` the same way, pinned to a com
 - Statuses and reasons are `SCREAMING_SNAKE_CASE` from the one catalog; a method throws a plain error only for a programming mistake.
 - Results are one shape per method and never throw for an outcome an app should handle.
 - The Capacitor constraint on iOS: a served bundle is laid out under `Library/NoCloud/ionic_built_snapshots/<bundleId>`, the only place Capacitor resolves its persisted base path.
-- On Android, Capacitor loads a persisted `serverBasePath` twice at the start: `setServerBasePath()` posts a load and `loadWebView()` loads directly. Both page starts are the SDK's own, so the loader arms the page hold once more behind Capacitor's posted load when the start serves a downloaded bundle; a page start counted as the app's reload would apply a stored `next-start` release in the same launch. iOS reads the persisted path in `instanceDescriptor()` and loads once.
+- A page start the plugin did not request is never interpreted: `location.reload()`, a restarted WebContent process and Capacitor's second load of a persisted `serverBasePath` at an Android start all serve the running process's bundle. A `next-start` release applies at the next start, where the readiness gate runs with the first render as its signal.
+- Only a reload the SDK performs holds its events for the page that follows, and a held event goes out retained, which Capacitor keeps across a page's reset, so a page replaced before it listens leaves them to the next page.
 
 ## Agent workspace
 
