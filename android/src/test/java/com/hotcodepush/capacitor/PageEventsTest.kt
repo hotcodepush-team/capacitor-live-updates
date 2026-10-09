@@ -2,7 +2,6 @@ package com.hotcodepush.capacitor
 
 import com.getcapacitor.JSObject
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -32,7 +31,16 @@ class PageEventsTest {
         pageEvents.releaseToPage()
 
         assertEquals(listOf(Triple("updateRolledBack", "r2", true), Triple("updateAvailable", "r3", true)), notified)
-        assertFalse(pageEvents.isPageLoadPending)
+    }
+
+    @Test
+    fun shouldDeliverAnEventToThePageThatRunsWhenThePageOfTheLoadBegan() {
+        pageEvents.holdUntilNextPage()
+        pageEvents.releaseToPage()
+
+        pageEvents.deliver("updateAvailable", event("r3"), retainUntilConsumed = false)
+
+        assertEquals(listOf(Triple("updateAvailable", "r3", false)), notified)
     }
 
     private fun event(releaseId: String) = JSObject().put("releaseId", releaseId)

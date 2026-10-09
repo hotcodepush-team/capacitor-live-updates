@@ -9,7 +9,7 @@ final class PageEvents {
     private weak var plugin: CAPPlugin?
     private var heldEvents: [(eventName: String, data: JSObject)] = []
     /// A load the SDK started has not begun its page yet.
-    private(set) var isPageLoadPending = false
+    private var isPageLoadPending = false
 
     init(plugin: CAPPlugin) {
         self.plugin = plugin

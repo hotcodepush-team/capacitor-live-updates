@@ -10,8 +10,7 @@ class PageEvents(private val notifyListeners: (eventName: String, data: JSObject
     private val heldEvents = mutableListOf<Pair<String, JSObject>>()
 
     /** A load the SDK started has not begun its page yet. */
-    var isPageLoadPending = false
-        private set
+    private var isPageLoadPending = false
 
     fun holdUntilNextPage() {
         isPageLoadPending = true
