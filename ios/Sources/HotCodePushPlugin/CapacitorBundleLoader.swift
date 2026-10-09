@@ -76,15 +76,6 @@ final class CapacitorBundleLoader: BundleLoader {
         bridge?.setServerBasePath(CapacitorBundleLoader.basePath(bundleId: bundleId))
     }
 
-    /// A reload the SDK did not start serves, as a start does, the bundle persisted for the next start. Main thread.
-    func reloadPersistedBundle() {
-        let persistedPath = KeyValueStore.standard[CapacitorBundleLoader.serverBasePathKey, as: String.self]
-        let persistedBundleId = CapacitorBundleLoader.resolveBundleId(path: persistedPath)
-        if persistedBundleId != servedBundleId() {
-            loadServedBundle(bundleId: persistedBundleId)
-        }
-    }
-
     private func reloadWebView(bundleId: String?) {
         guard let bridge = bridge else { return }
         willLoadPage()

@@ -19,7 +19,7 @@ import java.io.File
  * read when the bridge loads the WebView right after the plugins load; a bundle is laid out there by path. Until the start has
  * decided, a switch only changes what that first load serves; from then on it reloads the WebView.
  *
- * `willLoadPage` runs on the main thread for every load the SDK starts before its page begins, the bridge's loads at the start included.
+ * `willLoadPage` runs on the main thread before every load the SDK starts, the first one included.
  */
 class CapacitorBundleLoader(private val context: Context, private val bridge: Bridge, private val willLoadPage: () -> Unit) : BundleLoader {
     private val projectionsDirectory = File(File(context.filesDir, "hotcodepush"), "www")
@@ -55,11 +55,7 @@ class CapacitorBundleLoader(private val context: Context, private val bridge: Br
     override fun isConnectionMetered(): Boolean =
         (context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager)?.isActiveNetworkMetered ?: false
 
-    /**
-     * The start has decided: the bridge's first load reads its bundle from the preferences, and a switch reloads the WebView from
-     * here on. A downloaded bundle the bridge loads twice, the load `setServerBasePath()` posts to the WebView and its own, so the
-     * page that follows the posted load is the start's too. Main thread, in `load()`.
-     */
+    /** The start has decided: the bridge's first load reads its bundle from the preferences, and a switch reloads the WebView from here on. Main thread, in `load()`. */
     fun beginServing() {
         val bundleId = synchronized(this) {
             isServing = true
@@ -67,14 +63,6 @@ class CapacitorBundleLoader(private val context: Context, private val bridge: Br
         }
         persistServedBundle(bundleId)
         willLoadPage()
-        // The main thread runs this once the bridge has loaded the WebView, and the WebView runs its posts in order.
-        if (bundleId != null) mainHandler.post { bridge.webView.post { willLoadPage() } }
-    }
-
-    /** A reload the SDK did not start serves, as a start does, the bundle persisted for the next start. Main thread. */
-    fun reloadPersistedBundle() {
-        val persistedBundleId = resolvePersistedBundleId()
-        if (persistedBundleId != servedBundleId()) loadServedBundle(persistedBundleId)
     }
 
     /** The activity is gone: a reload still waiting for the main thread has no WebView to go to. */

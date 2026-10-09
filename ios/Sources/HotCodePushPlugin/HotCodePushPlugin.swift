@@ -31,7 +31,6 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
     private static let missingConfigurationMessage = "HotCodePush is not configured: hotcodepush.json is missing from the app's resources. Run `npx hotcodepush init` and build the app once."
 
     private var core: Core?
-    private var loader: CapacitorBundleLoader?
     /// Why every method rejects while the core is absent: the resource file is missing, or the core's reader refused it.
     private var notConfiguredMessage = HotCodePushPlugin.missingConfigurationMessage
     private lazy var pageEvents = PageEvents(plugin: self)
@@ -62,7 +61,6 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
             http: UrlSessionHttpClient(),
             loader: loader,
             listener: self)
-        self.loader = loader
         self.core = core
         _ = core.handleAppStartBlocking()
         loader.beginServing()
@@ -75,15 +73,12 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
         NotificationCenter.default.addObserver(self, selector: #selector(handleWillEnterForeground), name: UIApplication.willEnterForegroundNotification, object: nil)
     }
 
-    /// A page of the app began: the events held for it go out, and one the SDK did not load is the app reloading on its own, a
-    /// `location.reload()` among them, which serves the bundle a start would and goes through the gate as a start does.
+    /// A page of the app began: the events held for it go out, retained until a page listens. A page start the SDK did not request
+    /// is never interpreted, a `location.reload()` or a restarted WebContent process among them: the page serves the bundle of this
+    /// run, a `next-start` release waits for the next process start, and the readiness gate runs from the start.
     private func handlePageStart(url: URL) {
         guard let serverURL = bridge?.config.serverURL, url.absoluteString.hasPrefix(serverURL.absoluteString) else { return }
-        let isLoadedBySdk = pageEvents.isPageLoadPending
         pageEvents.releaseToPage()
-        guard !isLoadedBySdk, let core = core, let loader = loader else { return }
-        loader.reloadPersistedBundle()
-        Task { await core.handleAppReload() }
     }
 
     @objc private func handleDidEnterBackground() {

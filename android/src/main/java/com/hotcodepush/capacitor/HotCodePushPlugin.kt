@@ -103,17 +103,12 @@ class HotCodePushPlugin : Plugin(), CoreListener {
     }
 
     /**
-     * A page of the app began: the events held for it go out, and one the SDK did not load is the app reloading on its own, a
-     * `location.reload()` among them, which serves the bundle a start would and goes through the gate as a start does.
+     * A page of the app began: the events held for it go out, retained until a page listens, so a page replaced before it listened,
+     * the first of Capacitor's two loads at the start of a downloaded bundle, leaves them to the next. A page start the SDK did not
+     * request is never interpreted, a `location.reload()` among them: the page serves the bundle of this run, a `next-start`
+     * release waits for the next process start, and the readiness gate runs from the start.
      */
-    private fun handlePageStart() {
-        val isLoadedBySdk = pageEvents.isPageLoadPending
-        pageEvents.releaseToPage()
-        if (isLoadedBySdk) return
-        val core = core ?: return
-        loader?.reloadPersistedBundle()
-        scope.launch { core.handleAppReload() }
-    }
+    private fun handlePageStart() = pageEvents.releaseToPage()
 
     override fun handleOnPause() {
         super.handleOnPause()
