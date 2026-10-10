@@ -62,8 +62,8 @@ export class HotCodePushWeb extends WebPlugin implements HotCodePushPlugin {
       fallbackRelease: null,
       index: null,
       lastCheck: null,
-      lastReportAt: null,
       nextRelease: null,
+      reportedAt: null,
     };
   }
 
