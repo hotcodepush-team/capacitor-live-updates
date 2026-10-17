@@ -199,12 +199,12 @@ class HotCodePushPlugin : Plugin(), CoreListener {
 
     @PluginMethod
     fun setRestartAllowed(call: PluginCall) {
-        val allowed = call.getBoolean("allowed")
-        if (allowed == null) {
-            call.reject("allowed must be a boolean")
+        val isAllowed = call.getBoolean("isAllowed")
+        if (isAllowed == null) {
+            call.reject("isAllowed must be a boolean")
             return
         }
-        runVoid(call) { it.setRestartAllowed(allowed) }
+        runVoid(call) { it.setRestartAllowed(isAllowed) }
     }
 
     /** Opens the shared core's debug screen over the app's activity. */
@@ -287,9 +287,9 @@ class HotCodePushPlugin : Plugin(), CoreListener {
 
     override fun updateFailed(event: UpdateFailedEvent) = deliver("updateFailed", JSObject.fromJSONObject(event.toJson()))
 
-    override fun downloadProgress(releaseId: String, downloadedBytes: Long, totalBytes: Long) {
-        val progress = if (totalBytes > 0) downloadedBytes.toDouble() / totalBytes else 0.0
-        deliver("downloadProgress", JSObject().put("releaseId", releaseId).put("downloadedBytes", downloadedBytes).put("totalBytes", totalBytes).put("progress", progress))
+    override fun downloadProgress(releaseId: String, progressBytes: Long, downloadSizeBytes: Long) {
+        val progress = if (downloadSizeBytes > 0) progressBytes.toDouble() / downloadSizeBytes else 0.0
+        deliver("downloadProgress", JSObject().put("downloadSizeBytes", downloadSizeBytes).put("progress", progress).put("progressBytes", progressBytes).put("releaseId", releaseId))
     }
 
     /** Retained until the page listens: the event belongs to the page the rollback reloads into. */

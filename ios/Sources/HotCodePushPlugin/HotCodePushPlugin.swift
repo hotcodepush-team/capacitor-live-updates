@@ -166,11 +166,11 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func setRestartAllowed(_ call: CAPPluginCall) {
-        guard let allowed = call.getBool("allowed") else {
-            call.reject("allowed must be a boolean")
+        guard let isAllowed = call.getBool("isAllowed") else {
+            call.reject("isAllowed must be a boolean")
             return
         }
-        runVoid(call) { core in await core.setRestartAllowed(allowed) }
+        runVoid(call) { core in await core.setRestartAllowed(isAllowed) }
     }
 
     /// The shared core's debug screen, presented over the bridge's view controller.
@@ -311,9 +311,9 @@ extension HotCodePushPlugin: CoreListener {
         deliver("updateFailed", event)
     }
 
-    public func downloadProgress(releaseId: String, downloadedBytes: Int, totalBytes: Int) {
-        let progress = totalBytes > 0 ? Double(downloadedBytes) / Double(totalBytes) : 0
-        deliver("downloadProgress", data: ["releaseId": releaseId, "downloadedBytes": downloadedBytes, "totalBytes": totalBytes, "progress": progress])
+    public func downloadProgress(releaseId: String, progressBytes: Int, downloadSizeBytes: Int) {
+        let progress = downloadSizeBytes > 0 ? Double(progressBytes) / Double(downloadSizeBytes) : 0
+        deliver("downloadProgress", data: ["downloadSizeBytes": downloadSizeBytes, "progress": progress, "progressBytes": progressBytes, "releaseId": releaseId])
     }
 
     /// Retained until the page listens: the event belongs to the page the rollback reloads into.
