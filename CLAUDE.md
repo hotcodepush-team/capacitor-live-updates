@@ -41,7 +41,7 @@ The shared types come from `@hotcodepush/protocol` the same way, pinned to a com
 ## Rules
 
 - The SDK never sees an API DTO: its contract is the channel index, the bundle manifest and the events endpoint, additive only.
-- Safety is on by default and cannot be switched off: the readiness gate, the local blocklist, the automatic rollback.
+- Safety is on by default and cannot be switched off: the readiness gate, the local blocklist, the automatic rollback. The embedded bundle is the one exception: a release that carries it is confirmed as it becomes current, never gated, rolled back or blocklisted, and downloads nothing.
 - Nothing a device does not need to decide lives here: rollout, conditions, revocation and the cap are evaluated from the index, never configured.
 - Every key in the store is `hotcodepush.<name>`; three identity keys survive everything, the rest is a cache dropped on an unknown `stateVersion`.
 - Statuses and reasons are `SCREAMING_SNAKE_CASE` from the one catalog; a method throws a plain error only for a programming mistake.
