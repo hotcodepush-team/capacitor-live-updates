@@ -1,4 +1,3 @@
-#if canImport(Capacitor)
 import Capacitor
 import Foundation
 import HotCodePushCore
@@ -325,4 +324,3 @@ extension HotCodePushPlugin: CoreListener {
         }
     }
 }
-#endif

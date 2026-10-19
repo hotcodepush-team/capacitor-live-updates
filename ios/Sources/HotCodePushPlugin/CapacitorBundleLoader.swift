@@ -1,4 +1,3 @@
-#if canImport(Capacitor)
 import Capacitor
 import Foundation
 import HotCodePushCore
@@ -130,4 +129,3 @@ final class AppBundleEmbeddedBundle: EmbeddedBundle {
         try FileManager.default.copyItem(at: publicDirectory.appendingPathComponent(path), to: destination)
     }
 }
-#endif

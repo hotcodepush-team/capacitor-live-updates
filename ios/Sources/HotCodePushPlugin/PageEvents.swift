@@ -1,4 +1,3 @@
-#if canImport(Capacitor)
 import Capacitor
 import Foundation
 import WebKit
@@ -62,4 +61,3 @@ final class PageStartListener: NSObject, WKScriptMessageHandler {
         onPageStart(url)
     }
 }
-#endif

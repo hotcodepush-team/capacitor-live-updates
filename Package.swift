@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "HotcodepushCapacitorLiveUpdates",
-    platforms: [.iOS(.v15), .macOS(.v12)],
+    platforms: [.iOS(.v15)],
     products: [
         .library(
             name: "HotcodepushCapacitorLiveUpdates",
@@ -18,8 +18,8 @@ let package = Package(
             name: "HotCodePushPlugin",
             dependencies: [
                 .product(name: "HotCodePushCore", package: "core-ios"),
-                .product(name: "Capacitor", package: "capacitor-swift-pm", condition: .when(platforms: [.iOS])),
-                .product(name: "Cordova", package: "capacitor-swift-pm", condition: .when(platforms: [.iOS]))
+                .product(name: "Capacitor", package: "capacitor-swift-pm"),
+                .product(name: "Cordova", package: "capacitor-swift-pm")
             ],
             path: "ios/Sources/HotCodePushPlugin",
             resources: [.copy("PrivacyInfo.xcprivacy")])
