@@ -23,12 +23,12 @@ The plugin layer keeps the bundle loader, the readiness signal and the bridge, n
 
 ## Commands
 
-| Command                                | Does                                             |
-| -------------------------------------- | ------------------------------------------------ |
-| `npm run lint`                         | ESLint, Prettier and SwiftLint                   |
-| `npm run build`                        | the TypeScript into `dist/`                      |
-| `npm run verify:ios`, `verify:android` | the platform builds, Android with its unit tests |
-| `npm test`                             | the Xcode build step's script tests, macOS only  |
+| Command                                | Does                                                                                                                                                                                              |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run lint`                         | ESLint, Prettier and SwiftLint                                                                                                                                                                    |
+| `npm run build`                        | the TypeScript into `dist/`; writes the SDK version from `package.json` into `SdkVersion.swift` and `SdkVersion.kt`, both ignored, so a fresh checkout runs it before opening the native projects |
+| `npm run verify:ios`, `verify:android` | the platform builds, Android with its unit tests                                                                                                                                                  |
+| `npm test`                             | the Xcode build step's script tests, macOS only                                                                                                                                                   |
 
 Run `npm run fmt` before every commit.
 
