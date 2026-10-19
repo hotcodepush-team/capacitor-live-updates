@@ -10,7 +10,7 @@ When code and plan disagree, stop and surface it; never improvise.
 ## Layout
 
 ```
-src/                                             definitions.ts (the plugin interface), index.ts, web.ts (the no-op)
+src/                                             definitions.ts (the plugin interface), index.ts
 ios/Sources/HotCodePushPlugin                    the Capacitor plugin and the bundle loader over HotCodePushCore
 android/src/main/java/com/hotcodepush/capacitor  the Capacitor plugin, the bundle loader over com.hotcodepush:core-android and PageEvents, which holds the events of a reload the SDK performs for the page that follows it
 android/src/test                                 the plugin's unit tests on Robolectric, which verify:android runs
