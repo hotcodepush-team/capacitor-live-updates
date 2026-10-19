@@ -29,7 +29,6 @@
   "files": [
     "android/src/main/",
     "android/build.gradle",
-    "android/consumer-rules.pro",
     "android/hotcodepush.gradle",
     "dist/",
     "ios/Sources/",
