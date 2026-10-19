@@ -309,9 +309,8 @@ extension HotCodePushPlugin: CoreListener {
         deliver("updateFailed", event)
     }
 
-    public func downloadProgress(releaseId: String, progressBytes: Int, downloadSizeBytes: Int) {
-        let progress = downloadSizeBytes > 0 ? Double(progressBytes) / Double(downloadSizeBytes) : 0
-        deliver("downloadProgress", data: ["downloadSizeBytes": downloadSizeBytes, "progress": progress, "progressBytes": progressBytes, "releaseId": releaseId])
+    public func downloadProgress(_ event: DownloadProgressEvent) {
+        deliver("downloadProgress", event)
     }
 
     /// Retained until the page listens: the event belongs to the page the rollback reloads into.

@@ -6,7 +6,7 @@ interface HotCodePushInternalPlugin extends HotCodePushPlugin {
   notifyRendered(): Promise<void>;
 }
 
-const HotCodePush = registerPlugin<HotCodePushInternalPlugin>('HotCodePush', {
+const plugin = registerPlugin<HotCodePushInternalPlugin>('HotCodePush', {
   web: () => import('./web').then(module => new module.HotCodePushWeb()),
 });
 
@@ -22,7 +22,7 @@ function notifyRenderedOnFirstFrame(): void {
   }
   const notify = () =>
     requestAnimationFrame(
-      () => void HotCodePush.notifyRendered().catch(() => undefined),
+      () => void plugin.notifyRendered().catch(() => undefined),
     );
   if (document.readyState === 'complete') {
     notify();
@@ -34,4 +34,4 @@ function notifyRenderedOnFirstFrame(): void {
 notifyRenderedOnFirstFrame();
 
 export * from './definitions';
-export { HotCodePush };
+export const HotCodePush: HotCodePushPlugin = plugin;
