@@ -1,5 +1,6 @@
 package com.hotcodepush.capacitor
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.SharedPreferences
 import android.content.pm.ApplicationInfo
@@ -332,17 +333,19 @@ class HotCodePushPlugin : Plugin(), CoreListener {
     }
 }
 
+/** Every write commits before it returns: `apply()` reaches the disk about 100 ms later, and a crash in that window would lose the state the next start rolls back from. */
+@SuppressLint("ApplySharedPref")
 class SharedPreferencesStore(private val preferences: SharedPreferences) : KeyValueStore {
     override fun getString(key: String): String? = preferences.getString(key, null)
 
     override fun putString(key: String, value: String?) {
-        preferences.edit().apply { if (value == null) remove(key) else putString(key, value) }.apply()
+        preferences.edit().apply { if (value == null) remove(key) else putString(key, value) }.commit()
     }
 
     override fun getInt(key: String): Int? = if (preferences.contains(key)) runCatching { preferences.getInt(key, 0) }.getOrNull() else null
 
     override fun putInt(key: String, value: Int?) {
-        preferences.edit().apply { if (value == null) remove(key) else putInt(key, value) }.apply()
+        preferences.edit().apply { if (value == null) remove(key) else putInt(key, value) }.commit()
     }
 }
 
