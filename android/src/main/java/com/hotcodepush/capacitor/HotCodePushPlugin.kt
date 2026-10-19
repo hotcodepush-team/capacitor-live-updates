@@ -142,15 +142,7 @@ class HotCodePushPlugin : Plugin(), CoreListener {
     fun clearUpdates(call: PluginCall) = runVoid(call) { it.clearUpdates() }
 
     @PluginMethod
-    fun downloadUpdate(call: PluginCall) {
-        val options = try {
-            downloadUpdateOptions(call)
-        } catch (exception: PlainException) {
-            call.reject(exception.message)
-            return
-        }
-        run(call) { it.downloadUpdate(options).toJson() }
-    }
+    fun downloadUpdate(call: PluginCall) = run(call) { it.downloadUpdate(downloadUpdateOptions(call)).toJson() }
 
     @PluginMethod
     fun getChannel(call: PluginCall) = run(call) { it.channel().toJson() }
@@ -197,13 +189,8 @@ class HotCodePushPlugin : Plugin(), CoreListener {
     }
 
     @PluginMethod
-    fun setRestartAllowed(call: PluginCall) {
-        val isAllowed = call.getBoolean("isAllowed")
-        if (isAllowed == null) {
-            call.reject("isAllowed must be a boolean")
-            return
-        }
-        runVoid(call) { it.setRestartAllowed(isAllowed) }
+    fun setRestartAllowed(call: PluginCall) = runVoid(call) {
+        it.setRestartAllowed(call.getBoolean("isAllowed") ?: throw PlainException("isAllowed must be a boolean"))
     }
 
     /** Opens the shared core's debug screen over the app's activity. */
@@ -219,15 +206,7 @@ class HotCodePushPlugin : Plugin(), CoreListener {
     }
 
     @PluginMethod
-    fun sync(call: PluginCall) {
-        val options = try {
-            syncOptions(call)
-        } catch (exception: PlainException) {
-            call.reject(exception.message)
-            return
-        }
-        run(call) { it.sync(SyncTrigger.MANUAL, options).toJson() }
-    }
+    fun sync(call: PluginCall) = run(call) { it.sync(SyncTrigger.MANUAL, syncOptions(call)).toJson() }
 
     /** Each stage's strategy for this call; a value outside its choices is a programming mistake and rejects the call. */
     private fun syncOptions(call: PluginCall) = SyncOptions(

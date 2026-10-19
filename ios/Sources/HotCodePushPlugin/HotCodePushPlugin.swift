@@ -102,12 +102,7 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func downloadUpdate(_ call: CAPPluginCall) {
-        do {
-            let options = try HotCodePushPlugin.downloadUpdateOptions(from: call)
-            run(call) { core in try await core.downloadUpdate(options: options) }
-        } catch {
-            call.reject(error.localizedDescription)
-        }
+        run(call) { core in try await core.downloadUpdate(options: HotCodePushPlugin.downloadUpdateOptions(from: call)) }
     }
 
     @objc func getChannel(_ call: CAPPluginCall) {
@@ -164,11 +159,10 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func setRestartAllowed(_ call: CAPPluginCall) {
-        guard let isAllowed = call.getBool("isAllowed") else {
-            call.reject("isAllowed must be a boolean")
-            return
+        runVoid(call) { core in
+            guard let isAllowed = call.getBool("isAllowed") else { throw PlainError("isAllowed must be a boolean") }
+            await core.setRestartAllowed(isAllowed)
         }
-        runVoid(call) { core in await core.setRestartAllowed(isAllowed) }
     }
 
     /// The shared core's debug screen, presented over the bridge's view controller.
@@ -188,12 +182,7 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func sync(_ call: CAPPluginCall) {
-        do {
-            let options = try HotCodePushPlugin.syncOptions(from: call)
-            run(call) { core in try await core.sync(trigger: .manual, options: options) }
-        } catch {
-            call.reject(error.localizedDescription)
-        }
+        run(call) { core in try await core.sync(trigger: .manual, options: HotCodePushPlugin.syncOptions(from: call)) }
     }
 
     /// Each stage's strategy for this call; a value outside its choices is a programming mistake and rejects the call.

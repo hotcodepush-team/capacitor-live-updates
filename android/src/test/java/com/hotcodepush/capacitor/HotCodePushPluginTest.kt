@@ -9,6 +9,7 @@ import com.getcapacitor.JSObject
 import com.getcapacitor.PluginCall
 import com.getcapacitor.WebViewListener
 import com.hotcodepush.core.Core
+import com.hotcodepush.core.PlainException
 import com.hotcodepush.core.Release
 import com.hotcodepush.core.RollbackReason
 import com.hotcodepush.core.UpdateRolledBackEvent
@@ -19,11 +20,14 @@ import org.junit.Assert.assertThrows
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.ArgumentCaptor
+import org.mockito.ArgumentMatchers.any
 import org.mockito.ArgumentMatchers.anyString
+import org.mockito.ArgumentMatchers.eq
 import org.mockito.Mockito.`when`
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.mockConstruction
 import org.mockito.Mockito.never
+import org.mockito.Mockito.timeout
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.verifyNoMoreInteractions
 import org.robolectric.RobolectricTestRunner
@@ -67,12 +71,15 @@ class HotCodePushPluginTest {
 
     @Test
     fun shouldRejectTheDownloadWhenItsApplyStrategyIsNotOneOfItsChoices() {
-        val call = mock(PluginCall::class.java)
-        `when`(call.getString("applyStrategy")).thenReturn("later")
+        mockConstruction(Core::class.java).use {
+            loadPlugin()
+            val call = mock(PluginCall::class.java)
+            `when`(call.getString("applyStrategy")).thenReturn("later")
 
-        HotCodePushPlugin().downloadUpdate(call)
+            plugin.downloadUpdate(call)
 
-        verify(call).reject("applyStrategy is not one of its choices: later")
+            verify(call, timeout(CALL_TIMEOUT_MILLIS)).reject(eq("applyStrategy is not one of its choices: later"), any(PlainException::class.java))
+        }
     }
 
     @Test
@@ -158,6 +165,10 @@ class HotCodePushPluginTest {
 
     companion object {
         const val LOCAL_URL = "https://localhost"
+
+        /** How long a test waits for a call's coroutine, which runs on the IO dispatcher. */
+        const val CALL_TIMEOUT_MILLIS = 5_000L
+
         val ROLLBACK = UpdateRolledBackEvent(Release("r2", 2, "b2", "1.0.1", false), Release("r1", 1, "b1", "1.0.0", false), RollbackReason.APP_CRASHED)
     }
 }
