@@ -1,20 +1,19 @@
 import Capacitor
 import Foundation
 import HotCodePushCore
-import Network
 
 /// Capacitor serves the WebView from its bridge's base path, at launch the path persisted under `serverBasePath`, resolved inside
 /// `Library/NoCloud/ionic_built_snapshots/<last path component>`; a bundle is laid out there by path. Until the start has decided,
 /// a switch only changes what the first load serves; from then on it reloads the WebView.
 final class CapacitorBundleLoader: BundleLoader {
+    static let embeddedDirectory = Bundle.main.bundleURL.appendingPathComponent("public", isDirectory: true)
     private static let serverBasePathKey = "serverBasePath"
     private static let snapshotsDirectory = "NoCloud/ionic_built_snapshots"
 
     private weak var bridge: CAPBridgeProtocol?
     private let willLoadPage: () -> Void
     private let lock = NSLock()
-    private let monitor = NWPathMonitor()
-    private var isMetered = false
+    private let networkMonitor = NetworkMonitor()
     /// The bundle the WebView serves, or serves at its first load while the start decides; `nil` is the embedded bundle.
     private var servedBundle: String?
     /// The WebView loads: a switch reloads it from here on.
@@ -25,10 +24,6 @@ final class CapacitorBundleLoader: BundleLoader {
         self.bridge = bridge
         self.willLoadPage = willLoadPage
         servedBundle = CapacitorBundleLoader.resolveBundleId(path: bridge.config.appLocation.path)
-        monitor.pathUpdateHandler = { [weak self] path in
-            self?.isMetered = path.isExpensive || path.isConstrained
-        }
-        monitor.start(queue: DispatchQueue.global(qos: .utility))
     }
 
     func projectionDirectory(bundleId: String) -> URL {
@@ -61,7 +56,7 @@ final class CapacitorBundleLoader: BundleLoader {
     }
 
     func isConnectionMetered() -> Bool {
-        return isMetered
+        return networkMonitor.isConnectionMetered()
     }
 
     /// The start has decided: the bridge serves its bundle from the first load on, before Capacitor checks that the path exists,
@@ -94,7 +89,7 @@ final class CapacitorBundleLoader: BundleLoader {
     }
 
     private static func basePath(bundleId: String?) -> String {
-        return bundleId.map { projectionDirectory(bundleId: $0).path } ?? Bundle.main.bundleURL.appendingPathComponent("public").path
+        return bundleId.map { projectionDirectory(bundleId: $0).path } ?? embeddedDirectory.path
     }
 
     /// The bundle a base path names as Capacitor resolves it, by its last component under the snapshots directory, while that tree is
@@ -103,29 +98,5 @@ final class CapacitorBundleLoader: BundleLoader {
         guard let path = path, path.contains(snapshotsDirectory) else { return nil }
         let bundleId = URL(fileURLWithPath: path).lastPathComponent
         return FileManager.default.fileExists(atPath: projectionDirectory(bundleId: bundleId).path) ? bundleId : nil
-    }
-}
-
-/// The files compiled into the binary, `public/` in the app bundle, addressed by the embedded manifest's hashes; none without a manifest.
-final class AppBundleEmbeddedBundle: EmbeddedBundle {
-    private let pathsBySha256: [String: String]
-    private let publicDirectory = Bundle.main.bundleURL.appendingPathComponent("public", isDirectory: true)
-
-    init(manifest: EmbeddedBundleManifest?) {
-        var paths: [String: String] = [:]
-        for file in manifest?.files ?? [] {
-            paths[file.sha256] = file.path
-        }
-        pathsBySha256 = paths
-    }
-
-    func has(sha256: String) -> Bool {
-        guard let path = pathsBySha256[sha256] else { return false }
-        return FileManager.default.fileExists(atPath: publicDirectory.appendingPathComponent(path).path)
-    }
-
-    func copyFile(sha256: String, to destination: URL) throws {
-        guard let path = pathsBySha256[sha256] else { throw PlainError("No embedded file with hash \(sha256)") }
-        try FileManager.default.copyItem(at: publicDirectory.appendingPathComponent(path), to: destination)
     }
 }

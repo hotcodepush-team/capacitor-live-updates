@@ -1,8 +1,5 @@
 package com.hotcodepush.capacitor
 
-import android.content.Context
-import android.content.pm.ApplicationInfo
-import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import com.getcapacitor.JSObject
@@ -13,8 +10,8 @@ import com.getcapacitor.PluginMethod
 import com.getcapacitor.WebViewListener
 import com.getcapacitor.annotation.CapacitorPlugin
 import com.hotcodepush.core.ApplyStrategy
+import com.hotcodepush.core.AssetsEmbeddedBundle
 import com.hotcodepush.core.ChannelChoice
-import com.hotcodepush.core.Clock
 import com.hotcodepush.core.Configuration
 import com.hotcodepush.core.Core
 import com.hotcodepush.core.CoreListener
@@ -23,12 +20,9 @@ import com.hotcodepush.core.DeviceFacts
 import com.hotcodepush.core.DownloadProgressEvent
 import com.hotcodepush.core.DownloadStrategy
 import com.hotcodepush.core.DownloadUpdateOptions
-import com.hotcodepush.core.FileStore
 import com.hotcodepush.core.HandlerScheduler
 import com.hotcodepush.core.MandatoryApplyStrategy
-import com.hotcodepush.core.OkHttpClientAdapter
 import com.hotcodepush.core.PlainException
-import com.hotcodepush.core.SharedPreferencesStore
 import com.hotcodepush.core.SyncOptions
 import com.hotcodepush.core.SyncTrigger
 import com.hotcodepush.core.UpdateAvailableEvent
@@ -41,8 +35,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import org.json.JSONObject
-import java.io.File
-import java.io.FileNotFoundException
 
 @CapacitorPlugin(name = "HotCodePush")
 class HotCodePushPlugin : Plugin(), CoreListener {
@@ -54,7 +46,7 @@ class HotCodePushPlugin : Plugin(), CoreListener {
     private val pageEvents = PageEvents { eventName, data, retainUntilConsumed -> notifyListeners(eventName, data, retainUntilConsumed) }
 
     /** Why every method rejects while the core is absent: the resource file is missing, or the core's reader refused it. */
-    private var notConfiguredMessage = MISSING_CONFIGURATION_MESSAGE
+    private var notConfiguredMessage = Configuration.MISSING_MESSAGE
 
     /** Hears each page the WebView begins in its main frame, after the bridge dropped the listeners of the one before. */
     private val pageStartListener = object : WebViewListener() {
@@ -69,9 +61,9 @@ class HotCodePushPlugin : Plugin(), CoreListener {
      */
     override fun load() {
         val configuration = try {
-            readConfiguration(context)
+            Configuration.read(context)
         } catch (exception: Exception) {
-            notConfiguredMessage = "HotCodePush is not configured: the app's hotcodepush.json was refused: ${exception.message}. Check the project's hotcodepush.json and build the app again."
+            notConfiguredMessage = Configuration.resolveRefusedMessage(exception)
             null
         }
         if (configuration == null) {
@@ -80,18 +72,14 @@ class HotCodePushPlugin : Plugin(), CoreListener {
         }
         val loader = CapacitorBundleLoader(context, bridge) { pageEvents.holdUntilNextPage() }
         val core = Core(
+            context = context,
             configuration = configuration,
-            device = deviceFacts(context),
-            store = SharedPreferencesStore(context.getSharedPreferences(defaultPreferencesName(context), Context.MODE_PRIVATE)),
-            files = FileStore(File(context.filesDir, "hotcodepush")),
-            embedded = AssetsEmbeddedBundle(context, configuration.embeddedBundleManifest),
-            http = OkHttpClientAdapter(),
+            device = DeviceFacts.current(context, SDK_VERSION),
+            embedded = AssetsEmbeddedBundle(context, configuration.embeddedBundleManifest, CapacitorBundleLoader.EMBEDDED_ASSET_PATH),
             loader = loader,
             listener = this,
-            scheduler = scheduler,
-            clock = Clock { System.currentTimeMillis() },
             scope = scope,
-            temporaryDirectory = File(context.cacheDir, "hotcodepush"),
+            scheduler = scheduler,
         )
         this.core = core
         this.loader = loader
@@ -279,32 +267,5 @@ class HotCodePushPlugin : Plugin(), CoreListener {
 
     companion object {
         const val TAG = "HotCodePush"
-        const val MISSING_CONFIGURATION_MESSAGE = "HotCodePush is not configured: hotcodepush.json is missing from the app's assets. Run `npx hotcodepush init` and build the app once."
-
-        /** The default `SharedPreferences`, the file `PreferenceManager.getDefaultSharedPreferences` names, without the dependency. */
-        fun defaultPreferencesName(context: Context) = "${context.packageName}_preferences"
-
-        /** The resource file the core reads, null when the app's assets lack it; a file the core's reader refuses throws its error. */
-        fun readConfiguration(context: Context): Configuration? {
-            val text = try {
-                context.assets.open("hotcodepush.json").bufferedReader().use { it.readText() }
-            } catch (exception: FileNotFoundException) {
-                return null
-            }
-            return Configuration.decode(text)
-        }
-
-        fun deviceFacts(context: Context): DeviceFacts {
-            val info = context.packageManager.getPackageInfo(context.packageName, 0)
-            val versionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) info.longVersionCode else @Suppress("DEPRECATION") info.versionCode.toLong()
-            return DeviceFacts(
-                platform = "android",
-                binaryVersion = info.versionName ?: "",
-                binaryBuild = versionCode.toString(),
-                osVersion = Build.VERSION.RELEASE ?: "",
-                sdkVersion = SDK_VERSION,
-                isDebugBuild = (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0,
-            )
-        }
     }
 }

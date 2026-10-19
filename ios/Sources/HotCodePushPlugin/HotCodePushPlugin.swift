@@ -1,7 +1,6 @@
 import Capacitor
 import Foundation
 import HotCodePushCore
-import UIKit
 
 @objc(HotCodePushPlugin)
 public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
@@ -25,11 +24,9 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "sync", returnType: CAPPluginReturnPromise)
     ]
 
-    private static let missingConfigurationMessage = "HotCodePush is not configured: hotcodepush.json is missing from the app's resources. Run `npx hotcodepush init` and build the app once."
-
     private var core: Core?
     /// Why every method rejects while the core is absent: the resource file is missing, or the core's reader refused it.
-    private var notConfiguredMessage = HotCodePushPlugin.missingConfigurationMessage
+    private var notConfiguredMessage = Configuration.missingMessage
     private lazy var pageEvents = PageEvents(plugin: self)
 
     /// Runs inside Capacitor's bridge, before its view controller loads the WebView: the start decides the bundle the first load
@@ -37,9 +34,9 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
     override public func load() {
         let configuration: Configuration?
         do {
-            configuration = try HotCodePushPlugin.readConfiguration()
+            configuration = try Configuration.read()
         } catch {
-            notConfiguredMessage = "HotCodePush is not configured: the app's hotcodepush.json was refused: \(HotCodePushPlugin.describeRefusal(error)). Check the project's hotcodepush.json and build the app again."
+            notConfiguredMessage = Configuration.resolveRefusedMessage(error)
             configuration = nil
         }
         guard let configuration = configuration, let bridge = bridge else {
@@ -51,11 +48,8 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
         }
         let core = Core(
             configuration: configuration,
-            device: HotCodePushPlugin.deviceFacts(),
-            store: UserDefaultsStore(),
-            files: FileStore(rootDirectory: HotCodePushPlugin.storeDirectory()),
-            embedded: AppBundleEmbeddedBundle(manifest: configuration.embeddedBundleManifest),
-            http: UrlSessionHttpClient(),
+            device: DeviceFacts.current(sdkVersion: sdkVersion),
+            embedded: AppBundleEmbeddedBundle(manifest: configuration.embeddedBundleManifest, rootDirectory: CapacitorBundleLoader.embeddedDirectory),
             loader: loader,
             listener: self)
         self.core = core
@@ -66,8 +60,7 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
                 self?.handlePageStart(url: url)
             }
         }
-        NotificationCenter.default.addObserver(self, selector: #selector(handleDidEnterBackground), name: UIApplication.didEnterBackgroundNotification, object: nil)
-        NotificationCenter.default.addObserver(self, selector: #selector(handleWillEnterForeground), name: UIApplication.willEnterForegroundNotification, object: nil)
+        core.observeAppLifecycle()
     }
 
     /// A page of the app began: the events held for it go out, retained until a page listens. A page start the SDK did not request
@@ -76,14 +69,6 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
     private func handlePageStart(url: URL) {
         guard let serverURL = bridge?.config.serverURL, url.absoluteString.hasPrefix(serverURL.absoluteString) else { return }
         pageEvents.releaseToPage()
-    }
-
-    @objc private func handleDidEnterBackground() {
-        Task { await core?.handleAppPause() }
-    }
-
-    @objc private func handleWillEnterForeground() {
-        Task { await core?.handleAppResume() }
     }
 
     // MARK: Methods
@@ -241,52 +226,10 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     static func jsObject<T: Encodable>(_ value: T) throws -> JSObject {
-        let data = try Json.encoder.encode(value)
-        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any], let js = JSTypes.coerceDictionaryToJSObject(object) else {
+        guard let js = JSTypes.coerceDictionaryToJSObject(try Json.encodeObject(value)) else {
             throw PlainError("The result could not be encoded")
         }
         return js
-    }
-
-    // MARK: The platform's facts
-
-    /// The resource file the core reads, `nil` when the app's resources lack it; a file the core's reader refuses throws its error.
-    static func readConfiguration() throws -> Configuration? {
-        guard let url = Bundle.main.url(forResource: "hotcodepush", withExtension: "json") else {
-            return nil
-        }
-        return try Configuration.decode(Data(contentsOf: url))
-    }
-
-    /// The reader's own message: a decoding error's `localizedDescription` hides it behind a generic sentence.
-    static func describeRefusal(_ error: Error) -> String {
-        switch error as? DecodingError {
-        case .dataCorrupted(let context)?, .keyNotFound(_, let context)?, .typeMismatch(_, let context)?, .valueNotFound(_, let context)?:
-            return context.debugDescription
-        default:
-            return error.localizedDescription
-        }
-    }
-
-    static func deviceFacts() -> DeviceFacts {
-        let info = Bundle.main.infoDictionary ?? [:]
-        #if DEBUG
-        let isDebugBuild = true
-        #else
-        let isDebugBuild = false
-        #endif
-        return DeviceFacts(
-            platform: "ios",
-            binaryVersion: info["CFBundleShortVersionString"] as? String ?? "",
-            binaryBuild: info["CFBundleVersion"] as? String ?? "",
-            osVersion: UIDevice.current.systemVersion,
-            sdkVersion: sdkVersion,
-            isDebugBuild: isDebugBuild)
-    }
-
-    static func storeDirectory() -> URL {
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        return support.appendingPathComponent("hotcodepush", isDirectory: true)
     }
 }
 
