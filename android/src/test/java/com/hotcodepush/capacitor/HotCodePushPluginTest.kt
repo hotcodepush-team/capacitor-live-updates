@@ -83,6 +83,19 @@ class HotCodePushPluginTest {
     }
 
     @Test
+    fun shouldResolveWithNoDataWhenTheMethodReturnsNothing() {
+        mockConstruction(Core::class.java).use {
+            loadPlugin()
+            val call = mock(PluginCall::class.java)
+
+            plugin.clearUpdates(call)
+
+            verify(call, timeout(CALL_TIMEOUT_MILLIS)).resolve()
+            verify(call, never()).resolve(any(JSObject::class.java))
+        }
+    }
+
+    @Test
     fun shouldApplyNothingWhenASecondPageStartsDuringTheStart() {
         persistDownloadedBundle("b1")
         mockConstruction(Core::class.java).use { cores ->

@@ -139,7 +139,10 @@ class HotCodePushPlugin : Plugin(), CoreListener {
     fun checkForUpdate(call: PluginCall) = run(call) { it.checkForUpdate().toJson() }
 
     @PluginMethod
-    fun clearUpdates(call: PluginCall) = runVoid(call) { it.clearUpdates() }
+    fun clearUpdates(call: PluginCall) = run(call) {
+        it.clearUpdates()
+        null
+    }
 
     @PluginMethod
     fun downloadUpdate(call: PluginCall) = run(call) { it.downloadUpdate(downloadUpdateOptions(call)).toJson() }
@@ -157,12 +160,18 @@ class HotCodePushPlugin : Plugin(), CoreListener {
     fun notifyReady(call: PluginCall) = run(call) { it.notifyReady().toJson() }
 
     @PluginMethod
-    fun notifyRendered(call: PluginCall) = runVoid(call) { it.handleRendered() }
+    fun notifyRendered(call: PluginCall) = run(call) {
+        it.handleRendered()
+        null
+    }
 
     @PluginMethod
     fun rollbackUpdate(call: PluginCall) {
         val reason = call.getString("reason")
-        runVoid(call) { it.rollbackUpdate(reason) }
+        run(call) {
+            it.rollbackUpdate(reason)
+            null
+        }
     }
 
     @PluginMethod
@@ -179,18 +188,25 @@ class HotCodePushPlugin : Plugin(), CoreListener {
                 }
             }
         }
-        runVoid(call) { it.setAttributes(changes) }
+        run(call) {
+            it.setAttributes(changes)
+            null
+        }
     }
 
     @PluginMethod
     fun setChannel(call: PluginCall) {
         val choice = call.getString("id")?.let { ChannelChoice.Id(it) } ?: call.getString("name")?.let { ChannelChoice.Name(it) }
-        runVoid(call) { it.setChannel(choice) }
+        run(call) {
+            it.setChannel(choice)
+            null
+        }
     }
 
     @PluginMethod
-    fun setRestartAllowed(call: PluginCall) = runVoid(call) {
+    fun setRestartAllowed(call: PluginCall) = run(call) {
         it.setRestartAllowed(call.getBoolean("isAllowed") ?: throw PlainException("isAllowed must be a boolean"))
+        null
     }
 
     /** Opens the shared core's debug screen over the app's activity. */
@@ -226,7 +242,8 @@ class HotCodePushPlugin : Plugin(), CoreListener {
         return parse(raw) ?: throw PlainException("$name is not one of its choices: $raw")
     }
 
-    private fun run(call: PluginCall, body: suspend (Core) -> JSONObject) {
+    /** Resolves with the body's result, or with no data when a method that returns nothing ends its body in `null`. */
+    private fun run(call: PluginCall, body: suspend (Core) -> JSONObject?) {
         val core = core
         if (core == null) {
             call.reject(notConfiguredMessage)
@@ -234,23 +251,8 @@ class HotCodePushPlugin : Plugin(), CoreListener {
         }
         scope.launch {
             try {
-                call.resolve(JSObject.fromJSONObject(body(core)))
-            } catch (exception: Exception) {
-                call.reject(exception.message, exception)
-            }
-        }
-    }
-
-    private fun runVoid(call: PluginCall, body: suspend (Core) -> Unit) {
-        val core = core
-        if (core == null) {
-            call.reject(notConfiguredMessage)
-            return
-        }
-        scope.launch {
-            try {
-                body(core)
-                call.resolve()
+                val result = body(core)
+                if (result == null) call.resolve() else call.resolve(JSObject.fromJSONObject(result))
             } catch (exception: Exception) {
                 call.reject(exception.message, exception)
             }

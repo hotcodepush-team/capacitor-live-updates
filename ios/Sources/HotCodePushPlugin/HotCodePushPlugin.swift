@@ -90,44 +90,53 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
     // MARK: Methods
 
     @objc func applyUpdate(_ call: CAPPluginCall) {
-        run(call) { core in await core.applyUpdate() }
+        run(call) { core in try HotCodePushPlugin.jsObject(await core.applyUpdate()) }
     }
 
     @objc func checkForUpdate(_ call: CAPPluginCall) {
-        run(call) { core in try await core.checkForUpdate() }
+        run(call) { core in try HotCodePushPlugin.jsObject(await core.checkForUpdate()) }
     }
 
     @objc func clearUpdates(_ call: CAPPluginCall) {
-        runVoid(call) { core in await core.clearUpdates() }
+        run(call) { core in
+            await core.clearUpdates()
+            return nil
+        }
     }
 
     @objc func downloadUpdate(_ call: CAPPluginCall) {
-        run(call) { core in try await core.downloadUpdate(options: HotCodePushPlugin.downloadUpdateOptions(from: call)) }
+        run(call) { core in try HotCodePushPlugin.jsObject(await core.downloadUpdate(options: HotCodePushPlugin.downloadUpdateOptions(from: call))) }
     }
 
     @objc func getChannel(_ call: CAPPluginCall) {
-        run(call) { core in await core.channel() }
+        run(call) { core in try HotCodePushPlugin.jsObject(await core.channel()) }
     }
 
     @objc func getDevice(_ call: CAPPluginCall) {
-        run(call) { core in await core.deviceResult() }
+        run(call) { core in try HotCodePushPlugin.jsObject(await core.deviceResult()) }
     }
 
     @objc func getState(_ call: CAPPluginCall) {
-        run(call) { core in await core.getState() }
+        run(call) { core in try HotCodePushPlugin.jsObject(await core.getState()) }
     }
 
     @objc func notifyReady(_ call: CAPPluginCall) {
-        run(call) { core in await core.notifyReady() }
+        run(call) { core in try HotCodePushPlugin.jsObject(await core.notifyReady()) }
     }
 
     @objc func notifyRendered(_ call: CAPPluginCall) {
-        runVoid(call) { core in await core.handleRendered() }
+        run(call) { core in
+            await core.handleRendered()
+            return nil
+        }
     }
 
     @objc func rollbackUpdate(_ call: CAPPluginCall) {
         let reason = call.getString("reason")
-        runVoid(call) { core in try await core.rollbackUpdate(detail: reason) }
+        run(call) { core in
+            try await core.rollbackUpdate(detail: reason)
+            return nil
+        }
     }
 
     @objc func setAttributes(_ call: CAPPluginCall) {
@@ -143,7 +152,10 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
                 return
             }
         }
-        runVoid(call) { core in try await core.setAttributes(changes) }
+        run(call) { core in
+            try await core.setAttributes(changes)
+            return nil
+        }
     }
 
     @objc func setChannel(_ call: CAPPluginCall) {
@@ -155,13 +167,17 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
         } else {
             choice = nil
         }
-        runVoid(call) { core in try await core.setChannel(choice) }
+        run(call) { core in
+            try await core.setChannel(choice)
+            return nil
+        }
     }
 
     @objc func setRestartAllowed(_ call: CAPPluginCall) {
-        runVoid(call) { core in
+        run(call) { core in
             guard let isAllowed = call.getBool("isAllowed") else { throw PlainError("isAllowed must be a boolean") }
             await core.setRestartAllowed(isAllowed)
+            return nil
         }
     }
 
@@ -182,7 +198,7 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func sync(_ call: CAPPluginCall) {
-        run(call) { core in try await core.sync(trigger: .manual, options: HotCodePushPlugin.syncOptions(from: call)) }
+        run(call) { core in try HotCodePushPlugin.jsObject(await core.sync(trigger: .manual, options: HotCodePushPlugin.syncOptions(from: call))) }
     }
 
     /// Each stage's strategy for this call; a value outside its choices is a programming mistake and rejects the call.
@@ -206,29 +222,19 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
         return value
     }
 
-    private func run<T: Encodable>(_ call: CAPPluginCall, _ body: @escaping (Core) async throws -> T) {
+    /// Resolves with the body's result, or with no data when a method that returns nothing ends its body in `nil`.
+    private func run(_ call: CAPPluginCall, _ body: @escaping (Core) async throws -> JSObject?) {
         guard let core = core else {
             call.reject(notConfiguredMessage)
             return
         }
         Task {
             do {
-                call.resolve(try HotCodePushPlugin.jsObject(try await body(core)))
-            } catch {
-                call.reject(error.localizedDescription)
-            }
-        }
-    }
-
-    private func runVoid(_ call: CAPPluginCall, _ body: @escaping (Core) async throws -> Void) {
-        guard let core = core else {
-            call.reject(notConfiguredMessage)
-            return
-        }
-        Task {
-            do {
-                try await body(core)
-                call.resolve()
+                if let result = try await body(core) {
+                    call.resolve(result)
+                } else {
+                    call.resolve()
+                }
             } catch {
                 call.reject(error.localizedDescription)
             }
