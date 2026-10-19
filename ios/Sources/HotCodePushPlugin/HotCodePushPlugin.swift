@@ -312,13 +312,9 @@ extension HotCodePushPlugin: CoreListener {
         deliver("updateRolledBack", event, retainUntilConsumed: true)
     }
 
+    /// On the main thread, in order behind the reload the loader starts there, so an event that follows a reload waits for its page.
     private func deliver<T: Encodable>(_ eventName: String, _ event: T, retainUntilConsumed: Bool = false) {
         guard let data = try? HotCodePushPlugin.jsObject(event) else { return }
-        deliver(eventName, data: data, retainUntilConsumed: retainUntilConsumed)
-    }
-
-    /// On the main thread, in order behind the reload the loader starts there, so an event that follows a reload waits for its page.
-    private func deliver(_ eventName: String, data: JSObject, retainUntilConsumed: Bool = false) {
         DispatchQueue.main.async { [weak self] in
             self?.pageEvents.deliver(eventName, data: data, retainUntilConsumed: retainUntilConsumed)
         }
