@@ -6,9 +6,7 @@ interface HotCodePushInternalPlugin extends HotCodePushPlugin {
   notifyRendered(): Promise<void>;
 }
 
-const plugin = registerPlugin<HotCodePushInternalPlugin>('HotCodePush', {
-  web: () => import('./web').then(module => new module.HotCodePushWeb()),
-});
+const plugin = registerPlugin<HotCodePushInternalPlugin>('HotCodePush');
 
 /**
  * The readiness signal `render`: the first frame the app paints after the bundle loaded.
