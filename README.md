@@ -24,7 +24,7 @@ pod 'HotCodePushCore', :git => 'https://github.com/hotcodepush-team/core-ios.git
 
 The Android library resolves on its own: the plugin adds core-android's `maven` branch, where the pinned commit is published, to the repositories of every project in the app's build.
 
-On Android the plugin keeps its store out of device backups and transfers: its manifest sets `android:fullBackupContent` and `android:dataExtractionRules` on `<application>`, merged into the app's manifest. An app that already sets either attribute hits a manifest-merger conflict. Add `tools:replace="android:fullBackupContent"` or `tools:replace="android:dataExtractionRules"` to your own `<application>`, and put `<exclude domain="file" path="hotcodepush/" />` into your own rules, inside both `<cloud-backup>` and `<device-transfer>` for the extraction rules; otherwise the store rides along in the backup again.
+On Android the plugin keeps its store out of device backups and transfers: the core's manifest sets `android:fullBackupContent` and `android:dataExtractionRules` on `<application>`, merged into the app's manifest. An app that already sets either attribute hits a manifest-merger conflict. Add `tools:replace="android:fullBackupContent"` or `tools:replace="android:dataExtractionRules"` to your own `<application>`, and put `<exclude domain="file" path="hotcodepush/" />` into your own rules, inside both `<cloud-backup>` and `<device-transfer>` for the extraction rules; otherwise the store rides along in the backup again.
 
 ## Usage
 
