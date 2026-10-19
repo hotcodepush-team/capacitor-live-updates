@@ -58,7 +58,7 @@ jobs:
       - run: npm test
       - run: brew install swiftlint
       - run: swiftlint lint --quiet --strict ios
-      - run: xcodebuild -scheme HotcodepushCapacitorLiveUpdates -destination generic/platform=iOS -quiet build
+      - run: npm run verify:ios
   preview:
     name: Publish the preview build to pkg.pr.new
     runs-on: ubuntu-latest

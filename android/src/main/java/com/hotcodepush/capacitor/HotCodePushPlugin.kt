@@ -302,7 +302,6 @@ class HotCodePushPlugin : Plugin(), CoreListener {
 
     companion object {
         const val TAG = "HotCodePush"
-        const val SDK_VERSION = "0.0.0"
         const val MISSING_CONFIGURATION_MESSAGE = "HotCodePush is not configured: hotcodepush.json is missing from the app's assets. Run `npx hotcodepush init` and build the app once."
 
         /** The default `SharedPreferences`, the file `PreferenceManager.getDefaultSharedPreferences` names, without the dependency. */

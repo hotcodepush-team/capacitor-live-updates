@@ -1,6 +1,9 @@
 .DS_Store
 dist
 node_modules
+# The SDK version, written from package.json by every build
+android/src/main/java/com/hotcodepush/capacitor/SdkVersion.kt
+ios/Sources/HotCodePushPlugin/SdkVersion.swift
 
 # iOS
 .build

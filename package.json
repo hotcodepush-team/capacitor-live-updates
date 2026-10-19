@@ -35,18 +35,19 @@
     "ios/Sources/",
     "scripts/",
     "!scripts/*.test.ts",
+    "!scripts/write-sdk-version.mjs",
     "HotcodepushCapacitorLiveUpdates.podspec",
     "Package.swift"
   ],
   "scripts": {
-    "build": "npm run clean && tsc && rollup -c rollup.config.mjs",
+    "build": "npm run clean && node scripts/write-sdk-version.mjs && tsc && rollup -c rollup.config.mjs",
     "clean": "rimraf ./dist",
     "fmt": "eslint . --fix && prettier --write . && swiftlint --fix --quiet ios",
     "lint": "eslint . && prettier --check . && swiftlint lint --quiet --strict ios",
     "test": "vitest run",
     "verify": "npm run lint && npm test && npm run build",
-    "verify:android": "cd android && ./gradlew build --console=plain",
-    "verify:ios": "xcodebuild -scheme HotcodepushCapacitorLiveUpdates -destination generic/platform=iOS -quiet build"
+    "verify:android": "node scripts/write-sdk-version.mjs && cd android && ./gradlew build --console=plain",
+    "verify:ios": "node scripts/write-sdk-version.mjs && xcodebuild -scheme HotcodepushCapacitorLiveUpdates -destination generic/platform=iOS -quiet build"
   },
   "devDependencies": {
     "@capacitor/android": "8.5.2",

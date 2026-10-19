@@ -6,8 +6,6 @@ import UIKit
 
 @objc(HotCodePushPlugin)
 public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
-    public static let sdkVersion = "0.0.0"
-
     public let identifier = "HotCodePushPlugin"
     public let jsName = "HotCodePush"
     public let pluginMethods: [CAPPluginMethod] = [
