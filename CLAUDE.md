@@ -44,10 +44,10 @@ The shared types come from `@hotcodepush/protocol` the same way, pinned to a com
 - Safety is on by default and cannot be switched off: the readiness gate, the local blocklist, the automatic rollback. The embedded bundle is the one exception: a release that carries it is confirmed as it becomes current, never gated, rolled back or blocklisted, and downloads nothing.
 - Nothing a device does not need to decide lives here: rollout, conditions, revocation and the cap are evaluated from the index, never configured.
 - Every key in the store is `hotcodepush.<name>`; three identity keys survive everything, the rest is a cache dropped on an unknown `stateVersion`.
-- Statuses and reasons are `SCREAMING_SNAKE_CASE` from the one catalog; a method throws a plain error only for a programming mistake.
+- Every catalog value is lowercase snake_case with no prefix, the statuses, the reasons and the strategies alike: `up_to_date`, `signature_invalid`, `next_start`; the event names, the methods, the fields, the environment variables, Xcode's build settings and each language's identifiers keep their own form. A method throws a plain error only for a programming mistake.
 - Results are one shape per method and never throw for an outcome an app should handle.
 - The Capacitor constraint on iOS: a served bundle is laid out under `Library/NoCloud/ionic_built_snapshots/<bundleId>`, the only place Capacitor resolves its persisted base path.
-- A page start the plugin did not request is never interpreted: `location.reload()`, a restarted WebContent process and Capacitor's second load of a persisted `serverBasePath` at an Android start all serve the running process's bundle. A `next-start` release applies at the next start, where the readiness gate runs with the first render as its signal.
+- A page start the plugin did not request is never interpreted: `location.reload()`, a restarted WebContent process and Capacitor's second load of a persisted `serverBasePath` at an Android start all serve the running process's bundle. A `next_start` release applies at the next start, where the readiness gate runs with the first render as its signal.
 - Only a reload the SDK performs holds its events for the page that follows, and a held event goes out retained, which Capacitor keeps across a page's reset, so a page replaced before it listens leaves them to the next page.
 
 ## Agent workspace

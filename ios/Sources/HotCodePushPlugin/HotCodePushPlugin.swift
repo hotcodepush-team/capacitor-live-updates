@@ -65,7 +65,7 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
 
     /// A page of the app began: the events held for it go out, retained until a page listens. A page start the SDK did not request
     /// is never interpreted, a `location.reload()` or a restarted WebContent process among them: the page serves the bundle of this
-    /// run, a `next-start` release waits for the next process start, and the readiness gate runs from the start.
+    /// run, a `next_start` release waits for the next process start, and the readiness gate runs from the start.
     private func handlePageStart(url: URL) {
         guard let serverURL = bridge?.config.serverURL, url.absoluteString.hasPrefix(serverURL.absoluteString) else { return }
         pageEvents.releaseToPage()
