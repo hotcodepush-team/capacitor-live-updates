@@ -44,7 +44,7 @@ See [hotcodepush.com/docs/capacitor](https://hotcodepush.com/docs/capacitor) for
 ```sh
 nvm use
 npm ci
-npm run build            # the TypeScript into dist/; run it before opening the native projects
+npm run build            # the TypeScript into dist/ and the iOS core into ios/Frameworks; run it before opening the native projects
 npm run lint
 npm test                 # the Xcode build step's script tests, macOS only
 npm run verify:ios       # the iOS build
