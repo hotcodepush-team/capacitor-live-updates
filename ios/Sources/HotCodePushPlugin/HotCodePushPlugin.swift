@@ -2,6 +2,13 @@ import Capacitor
 import Foundation
 import HotCodePushCore
 
+// The core ships prebuilt in Release, so the app's debug flag is read here, where the plugin compiles with the app.
+#if DEBUG
+private let isDebugBuild = true
+#else
+private let isDebugBuild = false
+#endif
+
 @objc(HotCodePushPlugin)
 public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "HotCodePushPlugin"
@@ -48,7 +55,7 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
         }
         let core = Core(
             configuration: configuration,
-            device: DeviceFacts.current(sdkVersion: sdkVersion),
+            device: DeviceFacts.current(sdkVersion: sdkVersion, isDebugBuild: isDebugBuild),
             embedded: AppBundleEmbeddedBundle(manifest: configuration.embeddedBundleManifest, rootDirectory: CapacitorBundleLoader.embeddedDirectory),
             loader: loader,
             listener: self)

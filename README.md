@@ -13,6 +13,7 @@ npm install https://pkg.pr.new/hotcodepush-team/capacitor-live-updates/@hotcodep
 npx cap sync
 ```
 
+The manual wiring, the Xcode phase that runs `scripts/binary-create-xcode.sh` and the `apply from` of `android/hotcodepush.gradle`, is in the [docs](https://hotcodepush.com/docs/sdks/capacitor).
 The plugin needs Capacitor 7 or 8 and iOS 15 or later; a Capacitor 7 app on CocoaPods raises its deployment target to 15.0 first.
 The native cores, `HotCodePushCore` on iOS and `com.hotcodepush:core-android`, resolve on their own.
 
@@ -37,14 +38,14 @@ Set `downloadStrategy` or `applyStrategy` to `manual` and call `downloadUpdate()
 
 ## Documentation
 
-See [hotcodepush.com/docs/capacitor](https://hotcodepush.com/docs/capacitor) for the configuration, methods, events, types and reasons.
+See [hotcodepush.com/docs/sdks/capacitor](https://hotcodepush.com/docs/sdks/capacitor) for the configuration, methods, events, types and reasons.
 
 ## Development
 
 ```sh
 nvm use
 npm ci
-npm run build            # the TypeScript into dist/; run it before opening the native projects
+npm run build            # the TypeScript into dist/ and the iOS core into ios/Frameworks; run it before opening the native projects
 npm run lint
 npm test                 # the Xcode build step's script tests, macOS only
 npm run verify:ios       # the iOS build

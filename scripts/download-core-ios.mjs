@@ -1,0 +1,57 @@
+import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// The pod vendors the core's XCFramework, which a podspec cannot download: every build fetches the release asset
+// Package.swift pins, checks it against the same checksum and unpacks it into ios/Frameworks, never committed.
+
+const packageDirectory = join(dirname(fileURLToPath(import.meta.url)), '..');
+const frameworksDirectory = join(packageDirectory, 'ios/Frameworks');
+const checksumFile = join(frameworksDirectory, 'HotCodePushCore.checksum');
+
+const manifest = readFileSync(join(packageDirectory, 'Package.swift'), 'utf8');
+const [, url, checksum] =
+  manifest.match(
+    /url: "([^"]+\/HotCodePushCore\.xcframework\.zip)",\s*checksum: "([0-9a-f]{64})"/,
+  ) ?? [];
+if (!url) {
+  throw new Error(
+    'Package.swift names no HotCodePushCore binary target with a url and a checksum',
+  );
+}
+
+if (
+  existsSync(checksumFile) &&
+  readFileSync(checksumFile, 'utf8') === checksum
+) {
+  process.exit(0);
+}
+
+const response = await fetch(url);
+if (!response.ok) {
+  throw new Error(`${url} answered ${response.status}`);
+}
+const archive = Buffer.from(await response.arrayBuffer());
+const actualChecksum = createHash('sha256').update(archive).digest('hex');
+if (actualChecksum !== checksum) {
+  throw new Error(
+    `${url} has the checksum ${actualChecksum}, Package.swift pins ${checksum}`,
+  );
+}
+
+const archiveFile = join(tmpdir(), `HotCodePushCore-${checksum}.zip`);
+writeFileSync(archiveFile, archive);
+rmSync(frameworksDirectory, { recursive: true, force: true });
+mkdirSync(frameworksDirectory, { recursive: true });
+execFileSync('unzip', ['-q', archiveFile, '-d', frameworksDirectory]);
+rmSync(archiveFile);
+writeFileSync(checksumFile, checksum);
