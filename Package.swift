@@ -10,14 +10,17 @@ let package = Package(
             targets: ["HotCodePushPlugin"])
     ],
     dependencies: [
-        .package(url: "https://github.com/ionic-team/capacitor-swift-pm.git", from: "8.0.0"),
-        .package(url: "https://github.com/hotcodepush-team/core-ios.git", revision: "906073c537d9651a91ef644d4ca694e1642dc69f")
+        .package(url: "https://github.com/ionic-team/capacitor-swift-pm.git", from: "8.0.0")
     ],
     targets: [
+        .binaryTarget(
+            name: "HotCodePushCore",
+            url: "https://github.com/hotcodepush-team/core-ios/releases/download/0.1.0/HotCodePushCore.xcframework.zip",
+            checksum: "a545ca21afa9ffb791484e17fbd2ea49e1f28340931cc5fe0526791debab4d1f"),
         .target(
             name: "HotCodePushPlugin",
             dependencies: [
-                .product(name: "HotCodePushCore", package: "core-ios"),
+                "HotCodePushCore",
                 .product(name: "Capacitor", package: "capacitor-swift-pm"),
                 .product(name: "Cordova", package: "capacitor-swift-pm")
             ],

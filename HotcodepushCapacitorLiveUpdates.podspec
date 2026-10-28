@@ -12,8 +12,8 @@ Pod::Spec.new do |s|
   s.source = { :git => package['repository']['url'], :tag => s.version.to_s }
   s.source_files = 'ios/Sources/**/*.swift'
   s.resource_bundles = { 'HotcodepushCapacitorLiveUpdates' => ['ios/Sources/HotCodePushPlugin/PrivacyInfo.xcprivacy'] }
+  s.vendored_frameworks = 'ios/Frameworks/HotCodePushCore.xcframework'
   s.ios.deployment_target = '15.0'
   s.dependency 'Capacitor'
-  s.dependency 'HotCodePushCore'
   s.swift_version = '5.9'
 end

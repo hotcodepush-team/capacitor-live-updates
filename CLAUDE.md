@@ -15,20 +15,20 @@ ios/Sources/HotCodePushPlugin                    the Capacitor plugin and the bu
 android/src/main/java/com/hotcodepush/capacitor  the Capacitor plugin, the bundle loader over com.hotcodepush:core-android and PageEvents, which holds the events of a reload the SDK performs for the page that follows it
 android/src/test                                 the plugin's unit tests on Robolectric, which verify:android runs
 android/hotcodepush.gradle                       the Gradle build step, a task per variant the app applies from its build.gradle
-scripts/                                         the Xcode build step's script, with the Node lookup, and its tests
+scripts/                                         the Xcode build step's script, with the Node lookup, and its tests; the core's download
 ```
 
-The native cores live in `core-ios` and `core-android`, consumed at pinned commits: `Package.swift` by `revision`, the pod through the consumer's Podfile by `:git` and `:commit`, the Android module from core-android's `maven` branch by full sha, which `android/build.gradle` adds to every project of the app's build; a core change lands there first and arrives here as a bump of the pin.
+The native cores live in `core-ios` and `core-android`. `core-ios` is the XCFramework of a release: `Package.swift` pins its URL and checksum, and `scripts/download-core-ios.mjs` unpacks the same file into the ignored `ios/Frameworks` for the pod's `vendored_frameworks`. The Android module comes from core-android's `maven` branch by full sha, which `android/build.gradle` adds to every project of the app's build; a core change lands there first and arrives here as a bump of the pin.
 The plugin layer keeps the bundle loader, the readiness signal and the bridge, nothing of the protocol.
 
 ## Commands
 
-| Command                                | Does                                                                                                                                                                                              |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `npm run lint`                         | ESLint, Prettier and SwiftLint                                                                                                                                                                    |
-| `npm run build`                        | the TypeScript into `dist/`; writes the SDK version from `package.json` into `SdkVersion.swift` and `SdkVersion.kt`, both ignored, so a fresh checkout runs it before opening the native projects |
-| `npm run verify:ios`, `verify:android` | the platform builds, Android with its unit tests                                                                                                                                                  |
-| `npm test`                             | the Xcode build step's script tests, macOS only                                                                                                                                                   |
+| Command                                | Does                                                                                                                                                                                                                                  |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run lint`                         | ESLint, Prettier and SwiftLint                                                                                                                                                                                                        |
+| `npm run build`                        | the TypeScript into `dist/`; writes the SDK version from `package.json` into `SdkVersion.swift` and `SdkVersion.kt` and downloads the core's XCFramework, all ignored, so a fresh checkout runs it before opening the native projects |
+| `npm run verify:ios`, `verify:android` | the platform builds, Android with its unit tests                                                                                                                                                                                      |
+| `npm test`                             | the Xcode build step's script tests, macOS only                                                                                                                                                                                       |
 
 Run `npm run fmt` before every commit.
 

@@ -5,6 +5,9 @@ node_modules
 android/src/main/java/com/hotcodepush/capacitor/SdkVersion.kt
 ios/Sources/HotCodePushPlugin/SdkVersion.swift
 
+# The core's XCFramework, downloaded by every build
+ios/Frameworks
+
 # iOS
 .build
 .swiftpm

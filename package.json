@@ -31,15 +31,17 @@
     "android/build.gradle",
     "android/hotcodepush.gradle",
     "dist/",
+    "ios/Frameworks/HotCodePushCore.xcframework/",
     "ios/Sources/",
     "scripts/",
     "!scripts/*.test.ts",
+    "!scripts/download-core-ios.mjs",
     "!scripts/write-sdk-version.mjs",
     "HotcodepushCapacitorLiveUpdates.podspec",
     "Package.swift"
   ],
   "scripts": {
-    "build": "npm run clean && node scripts/write-sdk-version.mjs && tsc && rollup -c rollup.config.mjs",
+    "build": "npm run clean && node scripts/write-sdk-version.mjs && node scripts/download-core-ios.mjs && tsc && rollup -c rollup.config.mjs",
     "clean": "rimraf ./dist",
     "fmt": "eslint . --fix && prettier --write . && swiftlint --fix --quiet ios",
     "lint": "eslint . && prettier --check . && swiftlint lint --quiet --strict ios",

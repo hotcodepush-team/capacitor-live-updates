@@ -16,11 +16,7 @@ A consumer pins a commit and bumps it deliberately; the preview comment on each 
 The plugin reads `hotcodepush.json` from the app's resources, written into the built app by the build step `npx hotcodepush init` wires into the native builds: an Xcode phase "Create HotCodePush binary" that runs this package's `scripts/binary-create-xcode.sh`, and an `apply from` of `android/hotcodepush.gradle` in `android/app/build.gradle`. Every build writes the file; an Xcode archive or a Gradle release variant also creates the store build's binary in HotCodePush, so a store build needs a login or `HOTCODEPUSH_TOKEN`.
 The Xcode phase needs Node: name it in `ios/App/.xcode.env` as `export NODE_BINARY=…`, `.xcode.env.local` overriding, else nvm, fnm, Volta, asdf and Homebrew are searched, and a build without any fails naming the fix.
 
-The native cores are the Swift package `HotCodePushCore` and the Android library `com.hotcodepush:core-android`, each pinned to a commit until it is published. Swift Package Manager, Capacitor's default on iOS, resolves the pinned revision on its own. A CocoaPods app pins the commit `Package.swift` names in its Podfile:
-
-```ruby
-pod 'HotCodePushCore', :git => 'https://github.com/hotcodepush-team/core-ios.git', :commit => '<sha>'
-```
+The iOS core, `HotCodePushCore`, comes with the plugin as a prebuilt framework: Swift Package Manager downloads the core release `Package.swift` names, and the pod carries the same framework, so a CocoaPods app adds nothing to its Podfile. The Android core, `com.hotcodepush:core-android`, is pinned to a commit until it is published.
 
 The plugin needs iOS 15 or later. A Capacitor 7 app on CocoaPods starts at iOS 14.0, so raise both before `npx cap sync`: `platform :ios, '15.0'` in `ios/App/Podfile` and `IPHONEOS_DEPLOYMENT_TARGET` in the Xcode project; otherwise `pod install` refuses the plugin. Capacitor 8 and Swift Package Manager already target iOS 15.
 
