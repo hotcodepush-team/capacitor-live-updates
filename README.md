@@ -1,28 +1,22 @@
 # Capacitor live updates by HotCodePush
 
-`@hotcodepush/capacitor-live-updates` is the Capacitor plugin that delivers over-the-air updates to your app: a live update reaches installed apps in seconds, without a store review. Learn more at [hotcodepush.com/capacitor-live-updates](https://hotcodepush.com/capacitor-live-updates).
+`@hotcodepush/capacitor-live-updates` is the Capacitor plugin that delivers over-the-air (OTA) updates to your app: a live update reaches installed apps in seconds, without a store review.
+Learn more at [hotcodepush.com/capacitor-live-updates](https://hotcodepush.com/capacitor-live-updates).
 
 ## Installation
 
-Until the package is published, install the preview build pkg.pr.new publishes for every commit on `main`, pinned to a commit:
+`npx hotcodepush init` installs the plugin and wires the build step into both native projects.
+By hand, until the package is on npm, install the preview build pkg.pr.new publishes for every commit on `main`, pinned to a commit:
 
 ```sh
 npm install https://pkg.pr.new/hotcodepush-team/capacitor-live-updates/@hotcodepush/capacitor-live-updates@<sha>
 npx cap sync
 ```
 
-A consumer pins a commit and bumps it deliberately; the preview comment on each commit names its `<sha>`.
+The plugin needs Capacitor 7 or 8 and iOS 15 or later; a Capacitor 7 app on CocoaPods raises its deployment target to 15.0 first.
+The native cores, `HotCodePushCore` on iOS and `com.hotcodepush:core-android`, resolve on their own.
 
-The plugin reads `hotcodepush.json` from the app's resources, written into the built app by the build step `npx hotcodepush init` wires into the native builds: an Xcode phase "Create HotCodePush binary" that runs this package's `scripts/binary-create-xcode.sh`, and an `apply from` of `android/hotcodepush.gradle` in `android/app/build.gradle`. Every build writes the file; an Xcode archive or a Gradle release variant also creates the store build's binary in HotCodePush, so a store build needs a login or `HOTCODEPUSH_TOKEN`.
-The Xcode phase needs Node: name it in `ios/App/.xcode.env` as `export NODE_BINARY=…`, `.xcode.env.local` overriding, else nvm, fnm, Volta, asdf and Homebrew are searched, and a build without any fails naming the fix.
-
-The iOS core, `HotCodePushCore`, comes with the plugin as a prebuilt framework: Swift Package Manager downloads the core release `Package.swift` names, and the pod carries the same framework, so a CocoaPods app adds nothing to its Podfile. The Android core, `com.hotcodepush:core-android`, is pinned to a commit until it is published.
-
-The plugin needs iOS 15 or later. A Capacitor 7 app on CocoaPods starts at iOS 14.0, so raise both before `npx cap sync`: `platform :ios, '15.0'` in `ios/App/Podfile` and `IPHONEOS_DEPLOYMENT_TARGET` in the Xcode project; otherwise `pod install` refuses the plugin. Capacitor 8 and Swift Package Manager already target iOS 15.
-
-The Android library resolves on its own: the plugin adds core-android's `maven` branch, where the pinned commit is published, to the repositories of every project in the app's build.
-
-On Android the plugin keeps its store out of device backups and transfers: the core's manifest sets `android:fullBackupContent` and `android:dataExtractionRules` on `<application>`, merged into the app's manifest. An app that already sets either attribute hits a manifest-merger conflict. Add `tools:replace="android:fullBackupContent"` or `tools:replace="android:dataExtractionRules"` to your own `<application>`, and put `<exclude domain="file" path="hotcodepush/" />` into your own rules, inside both `<cloud-backup>` and `<device-transfer>` for the extraction rules; otherwise the store rides along in the backup again.
+Every native build writes `hotcodepush.json` into the app; an Xcode archive or a Gradle release build also registers the store build in HotCodePush, so it needs `npx hotcodepush login` or `HOTCODEPUSH_TOKEN`.
 
 ## Usage
 
@@ -31,34 +25,35 @@ import { HotCodePush } from '@hotcodepush/capacitor-live-updates';
 
 const result = await HotCodePush.sync();
 if (result.status === 'downloaded') {
-  console.log(
-    `release #${result.release.number} applies at ${result.applyStrategy}`,
-  );
+  console.log(`release #${result.release.number} applies at ${result.applyStrategy}`);
 }
 ```
 
-Import the package in the app's entry file, the one that runs at every start, even when `checkStrategy` at `auto` does all the work: the import is what tells the SDK the app rendered, and an app that imports it late or not at all confirms no update and rolls every one back as `readiness_timed_out`.
-
-With `checkStrategy` at `auto`, the default, the SDK checks on start, on resume and while the app stays in the foreground, and what follows a check is the download and apply strategies' business; `sync()` runs one such cycle when you want an update now, and with `checkStrategy` at `manual` it is the only way a cycle starts. An app that asks before downloading sets `downloadStrategy` to `manual` and calls `downloadUpdate()` on `updateAvailable`, naming the apply strategies for that cycle if it wants; one that protects a flow sets `applyStrategy` to `manual` and calls `applyUpdate()` when it is ready.
+Import the package in the app's entry file: the import tells the SDK the app rendered, and an app that never imports it rolls every update back.
+With the default `checkStrategy` of `auto`, the SDK checks on start, on resume and in the foreground; `sync()` runs one cycle on demand.
+Set `downloadStrategy` or `applyStrategy` to `manual` and call `downloadUpdate()` or `applyUpdate()` yourself to control when an update lands.
 
 ## Documentation
 
-The SDK reference — configuration, methods, events, types and reasons — is at [hotcodepush.com/docs/capacitor](https://hotcodepush.com/docs/capacitor).
+See [hotcodepush.com/docs/capacitor](https://hotcodepush.com/docs/capacitor) for the configuration, methods, events, types and reasons.
 
 ## Development
 
 ```sh
 nvm use
 npm ci
+npm run build            # the TypeScript into dist/; run it before opening the native projects
 npm run lint
-npm run build
+npm test                 # the Xcode build step's script tests, macOS only
 npm run verify:ios       # the iOS build
 npm run verify:android   # the Android build and its unit tests
-npm test                 # the Xcode build step's script tests, macOS only
+npm run fmt              # run before every commit
 ```
 
 The cores and their tests live in [core-ios](https://github.com/hotcodepush-team/core-ios) and [core-android](https://github.com/hotcodepush-team/core-android).
+`CLAUDE.md` holds the layout and the rules.
 
 ## License
 
-See [LICENSE](./LICENSE). An app that ships the plugin ships the native cores' third-party code with it: FreeBSD's bspatch under the BSD 2-clause licence on both platforms and, on Android, the decompression of bzip2 1.0.8 under the bzip2 licence. The cores' `THIRD-PARTY-NOTICES`, in [core-ios](https://github.com/hotcodepush-team/core-ios/blob/main/THIRD-PARTY-NOTICES) and in [core-android](https://github.com/hotcodepush-team/core-android/blob/main/THIRD-PARTY-NOTICES), carry the notices, and an app's distribution reproduces them: the BSD 2-clause licence requires it of a binary, the bzip2 licence appreciates the acknowledgment.
+See [LICENSE](./LICENSE).
+An app that ships the plugin also ships the native cores' third-party code: FreeBSD's bspatch (BSD 2-clause) on both platforms and bzip2 1.0.8 on Android. Reproduce the notices from [core-ios](https://github.com/hotcodepush-team/core-ios/blob/main/THIRD-PARTY-NOTICES) and [core-android](https://github.com/hotcodepush-team/core-android/blob/main/THIRD-PARTY-NOTICES) in your app's distribution.
