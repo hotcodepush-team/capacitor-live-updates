@@ -37,7 +37,7 @@ Set `downloadStrategy` or `applyStrategy` to `manual` and call `downloadUpdate()
 
 ## Documentation
 
-See [hotcodepush.com/docs/capacitor](https://hotcodepush.com/docs/capacitor) for the configuration, methods, events, types and reasons.
+See [hotcodepush.com/docs/sdks/capacitor](https://hotcodepush.com/docs/sdks/capacitor) for the configuration, methods, events, types and reasons.
 
 ## Development
 
