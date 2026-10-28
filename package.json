@@ -61,10 +61,10 @@
     "eslint-plugin-import-x": "4.17.1",
     "prettier": "3.9.8",
     "rimraf": "6.1.2",
-    "rollup": "4.53.3",
+    "rollup": "4.65.0",
     "typescript": "5.9.3",
     "typescript-eslint": "8.70.0",
-    "vitest": "5.0.1"
+    "vitest": "5.0.5"
   },
   "peerDependencies": {
     "@capacitor/core": ">=7.0.0"
@@ -82,5 +82,10 @@
   },
   "dependencies": {
     "@hotcodepush/protocol": "https://pkg.pr.new/hotcodepush-team/protocol/@hotcodepush/protocol@313a015"
+  },
+  "overrides": {
+    "xcode": {
+      "uuid": "11.1.1"
+    }
   }
 }
