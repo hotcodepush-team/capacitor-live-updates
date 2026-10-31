@@ -12,22 +12,17 @@ import com.hotcodepush.core.NetworkMonitor
 import com.hotcodepush.core.ServedBundle
 import java.io.File
 
-/**
- * Capacitor serves the WebView from the directory it persisted under `serverBasePath` in its `CapWebViewSettings` preferences,
- * read when the bridge loads the WebView right after the plugins load; a bundle is laid out there by path. Until the start has
- * decided, a switch only changes what that first load serves; from then on it reloads the WebView.
- *
- * `willLoadPage` runs on the main thread before every load the SDK starts, the first one included.
- */
+// Capacitor serves the WebView from the directory persisted under `serverBasePath` in its `CapWebViewSettings` preferences, read when the bridge loads the WebView right after the plugins load.
+// `willLoadPage` runs on the main thread before every load the SDK starts, including the first one.
 class CapacitorBundleLoader(private val context: Context, private val bridge: Bridge, private val willLoadPage: () -> Unit) : BundleLoader {
     private val projectionsDirectory = File(FileStore.defaultRootDirectory(context), "www")
     private val mainHandler = Handler(Looper.getMainLooper())
     private val networkMonitor = NetworkMonitor(context)
 
-    /** The bundle the WebView serves, or serves at its first load while the start decides; `null` is the embedded bundle. */
+    // Until the first load, this is the bundle that load will serve. `null` means the embedded bundle.
     private var servedBundle: String? = resolvePersistedBundleId()
 
-    /** The WebView loads: a switch reloads it from here on. */
+    // Until the start has decided, a switch only changes what the first load serves. After that, a switch reloads the WebView.
     private var isServing = false
 
     override fun projectionDirectory(bundleId: String): File = File(projectionsDirectory, bundleId)
@@ -53,7 +48,7 @@ class CapacitorBundleLoader(private val context: Context, private val bridge: Br
 
     override fun isConnectionMetered(): Boolean = networkMonitor.isConnectionMetered()
 
-    /** The start has decided: the bridge's first load reads its bundle from the preferences, and a switch reloads the WebView from here on. Main thread, in `load()`. */
+    // Runs on the main thread in `load()`, once the start has decided. The first load of the bridge reads the bundle from the preferences.
     fun beginServing() {
         val bundleId = synchronized(this) {
             isServing = true
@@ -63,7 +58,7 @@ class CapacitorBundleLoader(private val context: Context, private val bridge: Br
         willLoadPage()
     }
 
-    /** The activity is gone: a reload still waiting for the main thread has no WebView to go to. */
+    // Once the activity is gone, a reload still waiting for the main thread has no WebView to go to.
     fun close() = mainHandler.removeCallbacksAndMessages(null)
 
     private fun reloadWebView(bundleId: String?) {
@@ -71,7 +66,7 @@ class CapacitorBundleLoader(private val context: Context, private val bridge: Br
         if (bundleId == null) bridge.setServerAssetPath(EMBEDDED_ASSET_PATH) else bridge.setServerBasePath(projectionDirectory(bundleId).path)
     }
 
-    /** A persisted tree that is no longer on disk is the embedded bundle, which is what Capacitor loads for it too. */
+    // For a persisted tree that is no longer on disk, Capacitor loads the embedded bundle too.
     private fun resolvePersistedBundleId(): String? = ServedBundle.resolveBundleId(preferences().getString(WebView.CAP_SERVER_PATH, null), projectionsDirectory)
 
     private fun preferences() = context.getSharedPreferences(WebView.WEBVIEW_PREFS_NAME, Activity.MODE_PRIVATE)

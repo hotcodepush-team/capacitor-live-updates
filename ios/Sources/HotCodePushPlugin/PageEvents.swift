@@ -2,12 +2,11 @@ import Capacitor
 import Foundation
 import WebKit
 
-/// The core's events for the page that runs: from a load the SDK starts until its page begins they are held for that page, so the
-/// page being replaced never receives them, and each goes out retained until that page listens for it. Main thread only.
+// From a load the SDK starts until its page begins, events are held for that page, so the page being replaced never gets them.
+// Use on the main thread only.
 final class PageEvents {
     private weak var plugin: CAPPlugin?
     private var heldEvents: [(eventName: String, data: JSObject)] = []
-    /// A load the SDK started has not begun its page yet.
     private var isPageLoadPending = false
 
     init(plugin: CAPPlugin) {
@@ -26,7 +25,7 @@ final class PageEvents {
         }
     }
 
-    /// A page began, after Capacitor dropped the listeners of the one before: the events held for it go out.
+    // By now, Capacitor has dropped the listeners of the previous page.
     func releaseToPage() {
         isPageLoadPending = false
         let events = heldEvents
@@ -37,8 +36,8 @@ final class PageEvents {
     }
 }
 
-/// Hears each page the WebView begins in its main frame, from a script that runs before the page's own, in a world the page cannot
-/// reach; the message arrives after Capacitor reset its bridge for the navigation and before any call of the new page.
+// The script runs in the main frame before the scripts of the page, in a content world the page cannot reach.
+// Its message arrives after Capacitor resets the bridge for the navigation and before any call of the new page.
 final class PageStartListener: NSObject, WKScriptMessageHandler {
     private static let messageName = "hotCodePushPageStart"
 

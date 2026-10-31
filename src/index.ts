@@ -8,9 +8,7 @@ interface HotCodePushInternalPlugin extends HotCodePushPlugin {
 
 const plugin = registerPlugin<HotCodePushInternalPlugin>('HotCodePush');
 
-/**
- * The readiness signal `render`: the first frame the app paints after the bundle loaded.
- */
+// This is the readiness signal `render`: the first frame the app paints after the bundle loaded.
 function notifyRenderedOnFirstFrame(): void {
   if (
     typeof window === 'undefined' ||

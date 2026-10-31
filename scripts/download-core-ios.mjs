@@ -11,8 +11,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// The pod vendors the core's XCFramework, which a podspec cannot download: every build fetches the release asset
-// Package.swift pins, checks it against the same checksum and unpacks it into ios/Frameworks, never committed.
+// A podspec cannot download the core XCFramework that the pod vendors.
+// So every build fetches the release asset that Package.swift pins, checks its checksum and unpacks it into the ignored ios/Frameworks.
 
 const packageDirectory = join(dirname(fileURLToPath(import.meta.url)), '..');
 const frameworksDirectory = join(packageDirectory, 'ios/Frameworks');

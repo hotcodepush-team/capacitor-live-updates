@@ -1,18 +1,17 @@
 #!/bin/sh
-# The build step of the Xcode build, run by the "Create HotCodePush binary" phase `hotcodepush init` appends to the app
-# target: the CLI writes hotcodepush.json into the app and, in a store build, creates the binary. The phase holds one
-# line; what it runs lives here.
+# The "Create HotCodePush binary" phase, which `hotcodepush init` appends to the app target, runs this script.
+# The phase holds a single line, so the logic lives here.
 set -e
 
-# The path below each Homebrew prefix: the one HOMEBREW_PREFIX names, else Intel's and then Apple silicon's.
+# HOMEBREW_PREFIX overrides the default prefixes of Intel and Apple silicon Macs.
 homebrew_paths() {
   for HOMEBREW in ${HOMEBREW_PREFIX:-/usr/local /opt/homebrew}; do
     echo "$HOMEBREW/$1"
   done
 }
 
-# The version managers and Homebrew, searched as React Native's find-node-for-xcode.sh searches them: each one present
-# goes in front of PATH, so the last one found wins.
+# Searches like find-node-for-xcode.sh of React Native.
+# Each version manager found goes in front of PATH, so the last one found wins.
 add_version_managers_to_path() {
   for HOMEBREW_BIN in $(homebrew_paths bin); do
     if [ -d "$HOMEBREW_BIN" ]; then
@@ -44,17 +43,16 @@ add_version_managers_to_path() {
   done
 }
 
-# The built app, where the target builds its product: an archive installs it apart from the configuration's directory, and
-# a CONFIGURATION_BUILD_DIR given on the command line leaves this one pointing at the real product. The resource file
-# lands beside the app's public directory, never inside the bundle it hashes.
+# TARGET_BUILD_DIR points at the real product, even for an archive or with CONFIGURATION_BUILD_DIR set on the command line.
+# The resource file goes beside the public directory, never inside the bundle it hashes.
 DEST="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH"
-# Capacitor's Xcode project sits in ios/App, two levels below the project's package.json and hotcodepush.json.
+# The Capacitor Xcode project sits in ios/App, two levels below package.json and hotcodepush.json.
 PROJECT_ROOT="${PROJECT_ROOT:-$PROJECT_DIR/../..}"
 
 cd "$PROJECT_ROOT"
 
-# Xcode's PATH has no Node when the build starts in Xcode. React Native's convention names it: NODE_BINARY in .xcode.env
-# beside the Xcode project, overridden by .xcode.env.local; without either, the version managers and Homebrew are searched.
+# A build started in Xcode has no Node on PATH, so .xcode.env can set NODE_BINARY and .xcode.env.local overrides it, as in React Native.
+# Without either, the script searches the version managers and Homebrew.
 NODE_BINARY=$(command -v node || true)
 for XCODE_ENV_PATH in "$PROJECT_DIR/.xcode.env" "$PROJECT_DIR/.xcode.env.local"; do
   if [ -f "$XCODE_ENV_PATH" ]; then
@@ -73,11 +71,10 @@ fi
 PATH="$(dirname "$NODE_BINARY"):$PATH"
 export PATH
 
-# Only a store build creates the binary: an archive, the build Xcode's "Run script only when installing" means; every
-# other build writes the resource file alone. The binary's identity is the one the device reports, from the built app's
-# processed Info.plist: Capacitor's template expands MARKETING_VERSION and CURRENT_PROJECT_VERSION there, and an app that
-# writes the version and build as literals keeps its own.
+# Only a store build creates the binary. A store build is an archive, the build that "Run script only when installing" means.
 if [ "$DEPLOYMENT_POSTPROCESSING" = "YES" ]; then
+  # The processed Info.plist holds the version and build that the device reports.
+  # It has MARKETING_VERSION and CURRENT_PROJECT_VERSION expanded, and it keeps literal values as they are.
   INFO_PLIST="$TARGET_BUILD_DIR/$INFOPLIST_PATH"
   BINARY_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$INFO_PLIST")
   BINARY_BUILD=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$INFO_PLIST")
