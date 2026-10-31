@@ -45,20 +45,18 @@ class HotCodePushPlugin : Plugin(), CoreListener {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val pageEvents = PageEvents { eventName, data, retainUntilConsumed -> notifyListeners(eventName, data, retainUntilConsumed) }
 
-    /** Why every method rejects while the core is absent: the resource file is missing, or the core's reader refused it. */
+    // Every method rejects with this while the core is absent: the resource file is missing, or the core refused to read it.
     private var notConfiguredMessage = Configuration.MISSING_MESSAGE
 
-    /** Hears each page the WebView begins in its main frame, after the bridge dropped the listeners of the one before. */
+    // A page start arrives after the bridge has dropped the listeners of the previous page.
     private val pageStartListener = object : WebViewListener() {
         override fun onPageStarted(webView: android.webkit.WebView) {
             if (webView.url?.startsWith(bridge.localUrl) == true) handlePageStart()
         }
     }
 
-    /**
-     * Runs while Capacitor builds its bridge, before the bridge loads the WebView: the start decides the bundle the first load
-     * serves, waiting for the core at most its bound, so the WebView never loads a bundle the start replaces.
-     */
+    // Capacitor calls this while it builds the bridge, before the WebView loads. The start decides the bundle here, with a bounded
+    // wait for the core, so the WebView never loads a bundle that the start replaces.
     override fun load() {
         val configuration = try {
             Configuration.read(context)
@@ -89,12 +87,8 @@ class HotCodePushPlugin : Plugin(), CoreListener {
         mainHandler.post { bridge.addWebViewListener(pageStartListener) }
     }
 
-    /**
-     * A page of the app began: the events held for it go out, retained until a page listens, so a page replaced before it listened,
-     * the first of Capacitor's two loads at the start of a downloaded bundle, leaves them to the next. A page start the SDK did not
-     * request is never interpreted, a `location.reload()` among them: the page serves the bundle of this run, a `next_start`
-     * release waits for the next process start, and the readiness gate runs from the start.
-     */
+    // Held events go out retained, because Capacitor loads a downloaded bundle twice at the start and replaces the first page before it listens.
+    // A page start the SDK did not request, such as `location.reload()`, is never interpreted: a `next_start` release waits for the next process start.
     private fun handlePageStart() = pageEvents.releaseToPage()
 
     override fun handleOnPause() {
@@ -109,7 +103,7 @@ class HotCodePushPlugin : Plugin(), CoreListener {
         scope.launch { core.handleAppResume() }
     }
 
-    /** The activity took its bridge with it: nothing of this instance may fire again, or two cores would race on one store. */
+    // The activity took the bridge with it. Nothing of this instance may fire again, or two cores would race on one store.
     override fun handleOnDestroy() {
         super.handleOnDestroy()
         scope.cancel()
@@ -197,7 +191,6 @@ class HotCodePushPlugin : Plugin(), CoreListener {
         null
     }
 
-    /** Opens the shared core's debug screen over the app's activity. */
     @PluginMethod
     fun showDebugScreen(call: PluginCall) {
         val core = core
@@ -212,25 +205,23 @@ class HotCodePushPlugin : Plugin(), CoreListener {
     @PluginMethod
     fun sync(call: PluginCall) = run(call) { it.sync(SyncTrigger.MANUAL, syncOptions(call)).toJson() }
 
-    /** Each stage's strategy for this call; a value outside its choices is a programming mistake and rejects the call. */
     private fun syncOptions(call: PluginCall) = SyncOptions(
         applyStrategy = option("applyStrategy", call.getString("applyStrategy"), ApplyStrategy::fromWire),
         downloadStrategy = option("downloadStrategy", call.getString("downloadStrategy"), DownloadStrategy::fromWire),
         mandatoryApplyStrategy = option("mandatoryApplyStrategy", call.getString("mandatoryApplyStrategy"), MandatoryApplyStrategy::fromWire),
     )
 
-    /** The apply strategies for this call, the download pinned to `auto`; a value outside its choices rejects the call. */
     private fun downloadUpdateOptions(call: PluginCall) = DownloadUpdateOptions(
         applyStrategy = option("applyStrategy", call.getString("applyStrategy"), ApplyStrategy::fromWire),
         mandatoryApplyStrategy = option("mandatoryApplyStrategy", call.getString("mandatoryApplyStrategy"), MandatoryApplyStrategy::fromWire),
     )
 
+    // A value outside the choices is a programming mistake, so it rejects the call.
     private fun <T> option(name: String, raw: String?, parse: (String?) -> T?): T? {
         if (raw == null) return null
         return parse(raw) ?: throw PlainException("$name is not one of its choices: $raw")
     }
 
-    /** Resolves with the body's result, or with no data when a method that returns nothing ends its body in `null`. */
     private fun run(call: PluginCall, body: suspend (Core) -> JSONObject?) {
         val core = core
         if (core == null) {
@@ -247,8 +238,6 @@ class HotCodePushPlugin : Plugin(), CoreListener {
         }
     }
 
-    // The listener
-
     override fun updateAvailable(event: UpdateAvailableEvent) = deliver("updateAvailable", JSObject.fromJSONObject(event.toJson()))
 
     override fun updateDownloaded(event: UpdateDownloadedEvent) = deliver("updateDownloaded", JSObject.fromJSONObject(event.toJson()))
@@ -257,10 +246,10 @@ class HotCodePushPlugin : Plugin(), CoreListener {
 
     override fun downloadProgress(event: DownloadProgressEvent) = deliver("downloadProgress", JSObject.fromJSONObject(event.toJson()))
 
-    /** Retained until the page listens: the event belongs to the page the rollback reloads into. */
+    // Retained until a page listens, because the event belongs to the page that the rollback reloads into.
     override fun updateRolledBack(event: UpdateRolledBackEvent) = deliver("updateRolledBack", JSObject.fromJSONObject(event.toJson()), retainUntilConsumed = true)
 
-    /** On the main thread, in order behind the reload the loader starts there, so an event that follows a reload waits for its page. */
+    // The main thread orders the event behind the reload that the loader starts there. So an event after a reload waits for its page.
     private fun deliver(eventName: String, data: JSObject, retainUntilConsumed: Boolean = false) {
         mainHandler.post { pageEvents.deliver(eventName, data, retainUntilConsumed) }
     }

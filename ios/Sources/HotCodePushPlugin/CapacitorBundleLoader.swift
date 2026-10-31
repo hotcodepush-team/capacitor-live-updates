@@ -2,9 +2,8 @@ import Capacitor
 import Foundation
 import HotCodePushCore
 
-/// Capacitor serves the WebView from its bridge's base path, at launch the path persisted under `serverBasePath`, resolved inside
-/// `Library/NoCloud/ionic_built_snapshots/<last path component>`; a bundle is laid out there by path. Until the start has decided,
-/// a switch only changes what the first load serves; from then on it reloads the WebView.
+// At launch, Capacitor resolves the persisted `serverBasePath` inside `Library/NoCloud/ionic_built_snapshots/<last path component>`.
+// So each bundle is laid out there.
 final class CapacitorBundleLoader: BundleLoader {
     static let embeddedDirectory = Bundle.main.bundleURL.appendingPathComponent("public", isDirectory: true)
     private static let serverBasePathKey = "serverBasePath"
@@ -14,12 +13,12 @@ final class CapacitorBundleLoader: BundleLoader {
     private let willLoadPage: () -> Void
     private let lock = NSLock()
     private let networkMonitor = NetworkMonitor()
-    /// The bundle the WebView serves, or serves at its first load while the start decides; `nil` is the embedded bundle.
+    // Until the first load, this is the bundle that load will serve. `nil` means the embedded bundle.
     private var servedBundle: String?
-    /// The WebView loads: a switch reloads it from here on.
+    // Until the start has decided, a switch only changes what the first load serves. After that, a switch reloads the WebView.
     private var isServing = false
 
-    /// `willLoadPage` runs on the main thread before every load the SDK starts, the first one included.
+    // `willLoadPage` runs on the main thread before every load the SDK starts, including the first one.
     init(bridge: CAPBridgeProtocol, willLoadPage: @escaping () -> Void) {
         self.bridge = bridge
         self.willLoadPage = willLoadPage
@@ -59,8 +58,8 @@ final class CapacitorBundleLoader: BundleLoader {
         return networkMonitor.isConnectionMetered()
     }
 
-    /// The start has decided: the bridge serves its bundle from the first load on, before Capacitor checks that the path exists,
-    /// and a switch reloads the WebView from here on. Main thread, before the WebView loads.
+    // Runs on the main thread once the start has decided and before the WebView loads.
+    // The base path is set here, before Capacitor checks that the path exists.
     func beginServing() {
         let bundleId = locked { () -> String? in
             isServing = true
@@ -92,8 +91,8 @@ final class CapacitorBundleLoader: BundleLoader {
         return bundleId.map { projectionDirectory(bundleId: $0).path } ?? embeddedDirectory.path
     }
 
-    /// The bundle a base path names as Capacitor resolves it, by its last component under the snapshots directory, while that tree is
-    /// on disk; a tree a restore from backup did not bring back, or any other path, is the embedded bundle.
+    // Capacitor resolves a base path by its last component under the snapshots directory.
+    // A tree that a restore from backup did not bring back, or any other path, means the embedded bundle.
     private static func resolveBundleId(path: String?) -> String? {
         guard let path = path, path.contains(snapshotsDirectory) else { return nil }
         let bundleId = URL(fileURLWithPath: path).lastPathComponent

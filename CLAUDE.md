@@ -50,6 +50,14 @@ The shared types come from `@hotcodepush/protocol` the same way, pinned to a com
 - A page start the plugin did not request is never interpreted: `location.reload()`, a restarted WebContent process and Capacitor's second load of a persisted `serverBasePath` at an Android start all serve the running process's bundle. A `next_start` release applies at the next start, where the readiness gate runs with the first render as its signal.
 - Only a reload the SDK performs holds its events for the page that follows, and a held event goes out retained, which Capacitor keeps across a page's reset, so a page replaced before it listens leaves them to the next page.
 
+## Comments
+
+- Comment only what the code cannot say: the why behind a choice, an outside quirk or limit, what a regex matches, a TODO with its issue link. Never what the code does.
+- Before adding a comment, try a clearer name or a small extracted function first.
+- One or two short plain sentences. Capital letter, full stop, own line above the code. No run-on sentences, no chains of possessives.
+- Doc comments (JSDoc, KDoc, `///`, docstrings) only on a package's public API: one line that says what it does, then only what a caller must know.
+- Never: section banners, commented-out code, change history, the same comment in two places.
+
 ## Agent workspace
 
 - `.mcp.json` registers the Capacitor server; the HotCodePush server joins when it exists.

@@ -1,6 +1,4 @@
-// The build step of the Android build. The app's build.gradle applies this file with the one line `hotcodepush init`
-// adds; for every variant, the task below runs the CLI over the web assets `npx cap sync` copied into the app, which
-// writes hotcodepush.json into the variant's assets and, for a store build, creates the binary.
+// The app's build.gradle applies this file through the line that `hotcodepush init` adds.
 
 import javax.inject.Inject
 import org.apache.tools.ant.taskdefs.condition.Os
@@ -50,13 +48,14 @@ androidComponents.onVariants(androidComponents.selector().all()) { variant ->
         it.description = "Writes hotcodepush.json into the ${variant.name} assets and creates the binary of a store build."
         it.binaryBuild.set(variant.outputs[0].versionCode.map { String.valueOf(it) })
         it.binaryVersion.set(variant.outputs[0].versionName)
-        // Where `npx cap sync` copies the web build: Capacitor's assets serve every variant from src/main.
+        // `npx cap sync` copies the web build here. Capacitor serves every variant from src/main.
         it.embeddedAssetsDirectory.set(layout.projectDirectory.dir('src/main/assets/public'))
-        // Only a store build creates the binary: a build type other than debug.
+        // A store build is any build type other than debug.
         it.storeBuild.set(variant.buildType != 'debug')
-        // Capacitor's Android project sits in android/, one level below the project's package.json and hotcodepush.json.
+        // The Capacitor Android project sits in android/, one level below package.json and hotcodepush.json.
         it.projectRoot.set(rootProject.layout.projectDirectory.dir('..'))
-        // The resource file carries the build's time as the floor and a store build creates its binary on every run: the step never counts as up to date.
+        // The resource file carries the build time as the floor, and a store build creates its binary on every run.
+        // So the step is never up to date.
         it.outputs.upToDateWhen { false }
     }
     variant.sources.assets.addGeneratedSourceDirectory(binaryCreateTask) { it.outputDirectory }

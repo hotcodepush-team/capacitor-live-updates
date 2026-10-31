@@ -18,7 +18,6 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import java.io.File
 
-/** The loader over Capacitor's preferences and a bridge that records its calls: what the first load serves and when a switch reloads. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class CapacitorBundleLoaderTest {

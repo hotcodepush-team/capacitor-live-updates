@@ -46,8 +46,8 @@ repositories {
     mavenCentral()
 }
 
-// The core comes from core-android's maven branch until the library is on Maven Central. The app resolves it as well,
-// so every project of the app's build lists the branch, for the core's group alone.
+// The core comes from the maven branch of core-android until the library is on Maven Central.
+// The app resolves the core too, so every project of the app build lists the branch, for the core group only.
 rootProject.allprojects {
     repositories {
         maven {
