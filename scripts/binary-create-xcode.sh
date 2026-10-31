@@ -3,43 +3,46 @@
 # The phase holds a single line, so the logic lives here.
 set -e
 
-# HOMEBREW_PREFIX overrides the default prefixes of Intel and Apple silicon Macs.
+# HOMEBREW_PREFIX overrides the default prefixes of Apple silicon and Intel Macs.
 homebrew_paths() {
-  for HOMEBREW in ${HOMEBREW_PREFIX:-/usr/local /opt/homebrew}; do
+  for HOMEBREW in ${HOMEBREW_PREFIX:-/opt/homebrew /usr/local}; do
     echo "$HOMEBREW/$1"
   done
 }
 
-# Searches like find-node-for-xcode.sh of React Native.
-# Each version manager found goes in front of PATH, so the last one found wins.
-add_version_managers_to_path() {
-  for HOMEBREW_BIN in $(homebrew_paths bin); do
-    if [ -d "$HOMEBREW_BIN" ]; then
-      PATH="$HOMEBREW_BIN:$PATH"
-    fi
+has_node() {
+  command -v node >/dev/null 2>&1
+}
+
+use_node_directory() {
+  [ -x "$1/node" ] || return 1
+  PATH="$1:$PATH"
+}
+
+# Tries Homebrew, then nvm, fnm, Volta and asdf in turn, where a Mac's Node usually comes from, and stops at the first Node.
+find_node() {
+  for NODE_DIRECTORY in $(homebrew_paths bin); do
+    if use_node_directory "$NODE_DIRECTORY"; then return; fi
   done
   NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
   for NVM_SCRIPT in "$NVM_DIR/nvm.sh" $(homebrew_paths opt/nvm/nvm.sh); do
     if [ -s "$NVM_SCRIPT" ]; then
       export NVM_DIR
       . "$NVM_SCRIPT" --no-use
-      nvm use >/dev/null 2>&1 || nvm use default >/dev/null 2>&1
+      nvm use >/dev/null 2>&1 || nvm use default >/dev/null 2>&1 || true
+      if has_node; then return; fi
       break
     fi
   done
-  ASDF_SHIMS="${ASDF_DATA_DIR:-$HOME/.asdf}/shims"
-  if [ -d "$ASDF_SHIMS" ]; then
-    PATH="$ASDF_SHIMS:$PATH"
-  fi
-  VOLTA_BIN="${VOLTA_HOME:-$HOME/.volta}/bin"
-  if [ -x "$VOLTA_BIN/node" ]; then
-    PATH="$VOLTA_BIN:$PATH"
-  fi
-  for FNM in "$(command -v fnm || true)" "$HOME/.fnm/fnm" "$HOME/Library/Application Support/fnm/fnm"; do
+  for FNM in "$(command -v fnm || true)" "$HOME/.fnm/fnm" "$HOME/Library/Application Support/fnm/fnm" $(homebrew_paths bin/fnm); do
     if [ -x "$FNM" ]; then
       eval "$("$FNM" env --shell bash)"
+      if has_node; then return; fi
       break
     fi
+  done
+  for NODE_DIRECTORY in "${VOLTA_HOME:-$HOME/.volta}/bin" "${ASDF_DATA_DIR:-$HOME/.asdf}/shims"; do
+    if use_node_directory "$NODE_DIRECTORY"; then return; fi
   done
 }
 
@@ -52,7 +55,7 @@ PROJECT_ROOT="${PROJECT_ROOT:-$PROJECT_DIR/../..}"
 cd "$PROJECT_ROOT"
 
 # A build started in Xcode has no Node on PATH, so .xcode.env can set NODE_BINARY and .xcode.env.local overrides it, as in React Native.
-# Without either, the script searches the version managers and Homebrew.
+# Without either, the script searches Homebrew and the version managers.
 NODE_BINARY=$(command -v node || true)
 for XCODE_ENV_PATH in "$PROJECT_DIR/.xcode.env" "$PROJECT_DIR/.xcode.env.local"; do
   if [ -f "$XCODE_ENV_PATH" ]; then
@@ -60,7 +63,7 @@ for XCODE_ENV_PATH in "$PROJECT_DIR/.xcode.env" "$PROJECT_DIR/.xcode.env.local";
   fi
 done
 if [ -z "$NODE_BINARY" ]; then
-  add_version_managers_to_path || true
+  find_node || true
   NODE_BINARY=$(command -v node || true)
 fi
 if [ -z "$NODE_BINARY" ]; then
