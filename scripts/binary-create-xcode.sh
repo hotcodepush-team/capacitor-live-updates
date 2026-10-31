@@ -4,15 +4,23 @@
 # line; what it runs lives here.
 set -e
 
+# The path below each Homebrew prefix: the one HOMEBREW_PREFIX names, else Intel's and then Apple silicon's.
+homebrew_paths() {
+  for HOMEBREW in ${HOMEBREW_PREFIX:-/usr/local /opt/homebrew}; do
+    echo "$HOMEBREW/$1"
+  done
+}
+
 # The version managers and Homebrew, searched as React Native's find-node-for-xcode.sh searches them: each one present
 # goes in front of PATH, so the last one found wins.
 add_version_managers_to_path() {
-  HOMEBREW_PREFIX="${HOMEBREW_PREFIX:-/opt/homebrew}"
-  if [ -d "$HOMEBREW_PREFIX/bin" ]; then
-    PATH="$HOMEBREW_PREFIX/bin:$PATH"
-  fi
+  for HOMEBREW_BIN in $(homebrew_paths bin); do
+    if [ -d "$HOMEBREW_BIN" ]; then
+      PATH="$HOMEBREW_BIN:$PATH"
+    fi
+  done
   NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
-  for NVM_SCRIPT in "$NVM_DIR/nvm.sh" "$HOMEBREW_PREFIX/opt/nvm/nvm.sh"; do
+  for NVM_SCRIPT in "$NVM_DIR/nvm.sh" $(homebrew_paths opt/nvm/nvm.sh); do
     if [ -s "$NVM_SCRIPT" ]; then
       export NVM_DIR
       . "$NVM_SCRIPT" --no-use
