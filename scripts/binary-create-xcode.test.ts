@@ -166,6 +166,20 @@ describe.skipIf(process.platform !== 'darwin')('binary-create-xcode.sh', () => {
     expect(readArguments(nodeDirectoryPath)[0]).toBe('hotcodepush');
   });
 
+  it("should find Node through Homebrew's nvm on Intel, whose ~/.nvm holds no nvm.sh", () => {
+    const nodeDirectoryPath = installNode('home/.nvm/versions/node/v24/bin');
+    const nvmDirectoryPath = join(projectPath, 'usr', 'local', 'opt', 'nvm');
+    mkdirSync(nvmDirectoryPath, { recursive: true });
+    writeExecutable(
+      join(nvmDirectoryPath, 'nvm.sh'),
+      `nvm() { PATH="${nodeDirectoryPath}:$PATH"; }\n`,
+    );
+
+    runScript({ HOMEBREW_PREFIX: join(projectPath, 'usr', 'local') });
+
+    expect(readArguments(nodeDirectoryPath)[0]).toBe('hotcodepush');
+  });
+
   it('should find Node through asdf when no .xcode.env names it', () => {
     const nodeDirectoryPath = installNode('home/.asdf/shims');
 
