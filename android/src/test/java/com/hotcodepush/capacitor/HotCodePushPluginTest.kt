@@ -148,7 +148,7 @@ class HotCodePushPluginTest {
     companion object {
         const val LOCAL_URL = "https://localhost"
         const val RESOURCE_FILE =
-            """{"appId":"0b6d5c1e-2f3a-4b5c-8d9e-0f1a2b3c4d5e","channelId":null,"checkIntervalSeconds":60,"builtAt":"2026-10-08T00:00:00.000Z","fingerprint":null,"embeddedBundleManifest":null}"""
+            """{"appId":"0b6d5c1e-2f3a-4b5c-8d9e-0f1a2b3c4d5e","channelId":null,"checkIntervalSeconds":60,"builtAt":"2026-10-08T00:00:00.000Z","fingerprint":null,"embeddedBundleManifest":null,"embeddedBundleId":null}"""
 
         // Calls run in a coroutine on the IO dispatcher.
         const val CALL_TIMEOUT_MILLIS = 5_000L

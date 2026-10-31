@@ -97,11 +97,11 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func getChannel(_ call: CAPPluginCall) {
-        run(call) { core in try HotCodePushPlugin.jsObject(await core.channel()) }
+        run(call) { core in try HotCodePushPlugin.jsObject(await core.getChannel()) }
     }
 
     @objc func getDevice(_ call: CAPPluginCall) {
-        run(call) { core in try HotCodePushPlugin.jsObject(await core.deviceResult()) }
+        run(call) { core in try HotCodePushPlugin.jsObject(await core.getDevice()) }
     }
 
     @objc func getState(_ call: CAPPluginCall) {
