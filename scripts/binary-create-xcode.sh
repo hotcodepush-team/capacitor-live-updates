@@ -43,7 +43,7 @@ PROJECT_ROOT="${PROJECT_ROOT:-$PROJECT_DIR/../..}"
 
 cd "$PROJECT_ROOT"
 
-# A build started in Xcode has no Node on PATH. As in React Native, .xcode.env can set NODE_BINARY and .xcode.env.local overrides it.
+# A build started in Xcode has no Node on PATH, so .xcode.env can set NODE_BINARY and .xcode.env.local overrides it, as in React Native.
 # Without either, the script searches the version managers and Homebrew.
 NODE_BINARY=$(command -v node || true)
 for XCODE_ENV_PATH in "$PROJECT_DIR/.xcode.env" "$PROJECT_DIR/.xcode.env.local"; do

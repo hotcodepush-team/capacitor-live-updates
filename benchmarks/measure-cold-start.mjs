@@ -1,8 +1,6 @@
 #!/usr/bin/env node
-// Prints the cold-start milliseconds of a prepared demo variant as JSON, with every run.
-// A run lasts from the launch to the `[baseline] first paint` console line, which the demo logs on its first animation frame.
-// The result is the median of N cold launches on the Pixel_9_Pro emulator and the iPhone simulator.
-// Both use debug builds, because only those forward the web view console to the host.
+// Prints the cold-start milliseconds of a prepared demo variant as JSON: the median of N cold launches, each timed from the launch to the `[baseline] first paint` line the demo logs on its first animation frame.
+// Debug builds, because only those forward the web view console to the host.
 import { execFileSync, spawn } from 'node:child_process';
 import { join } from 'node:path';
 

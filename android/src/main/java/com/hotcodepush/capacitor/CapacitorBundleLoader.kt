@@ -12,8 +12,7 @@ import com.hotcodepush.core.NetworkMonitor
 import com.hotcodepush.core.ServedBundle
 import java.io.File
 
-// Capacitor serves the WebView from the directory persisted under `serverBasePath` in its `CapWebViewSettings` preferences.
-// It reads that path when the bridge loads the WebView, right after the plugins load.
+// Capacitor serves the WebView from the directory persisted under `serverBasePath` in its `CapWebViewSettings` preferences, read when the bridge loads the WebView right after the plugins load.
 // `willLoadPage` runs on the main thread before every load the SDK starts, including the first one.
 class CapacitorBundleLoader(private val context: Context, private val bridge: Bridge, private val willLoadPage: () -> Unit) : BundleLoader {
     private val projectionsDirectory = File(FileStore.defaultRootDirectory(context), "www")

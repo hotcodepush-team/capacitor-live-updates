@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Copies the demo app into a scratch directory as one of the two variants that the baseline compares.
-// `with` installs the plugin tarball. `without` removes the plugin, its Xcode phase and its Gradle line, and keeps the screen without the plugin behind it.
+// Copies the demo app into a scratch directory as one of the two variants the baseline compares: `with` installs the plugin tarball, `without` removes the plugin with its Xcode phase and Gradle line.
+// Both variants keep the same screen, so only the plugin differs.
 import { execFileSync } from 'node:child_process';
 import { cpSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -74,7 +74,7 @@ if (variant === 'with') {
   );
   writeFileSync(
     mainPath,
-    `// The control for the baseline: the same screen without the plugin.
+    `// The demo without the plugin: the same screen, nothing behind it — the baseline's control.
 const VERSION = 'v1';
 
 const versionHeading = getElement('version');

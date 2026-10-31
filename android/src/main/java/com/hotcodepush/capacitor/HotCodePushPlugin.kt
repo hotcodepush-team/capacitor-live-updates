@@ -87,10 +87,8 @@ class HotCodePushPlugin : Plugin(), CoreListener {
         mainHandler.post { bridge.addWebViewListener(pageStartListener) }
     }
 
-    // Held events go out retained, so a page replaced before it listens leaves them to the next page.
-    // At the start of a downloaded bundle, Capacitor loads twice and the first page is replaced this way.
-    // A page start the SDK did not request, such as `location.reload()`, is never interpreted.
-    // The page serves the bundle of this run, and a `next_start` release waits for the next process start.
+    // Held events go out retained, because Capacitor loads a downloaded bundle twice at the start and replaces the first page before it listens.
+    // A page start the SDK did not request, such as `location.reload()`, is never interpreted: a `next_start` release waits for the next process start.
     private fun handlePageStart() = pageEvents.releaseToPage()
 
     override fun handleOnPause() {
