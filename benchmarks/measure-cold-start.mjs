@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// Cold-start milliseconds of a prepared demo variant: from the launch to the web view's first paint —
-// the `[baseline] first paint` console line the demo logs on its first animation frame — median of N
-// cold launches on the Pixel_9_Pro emulator and the iPhone simulator, both on debug builds so the web
-// view's console reaches the host. Prints JSON with every run.
+// Prints the cold-start milliseconds of a prepared demo variant as JSON, with every run.
+// A run lasts from the launch to the `[baseline] first paint` console line, which the demo logs on its first animation frame.
+// The result is the median of N cold launches on the Pixel_9_Pro emulator and the iPhone simulator.
+// Both use debug builds, because only those forward the web view console to the host.
 import { execFileSync, spawn } from 'node:child_process';
 import { join } from 'node:path';
 
@@ -22,7 +22,7 @@ if (!target || (!androidSerial && !iosUdid)) {
   process.exit(2);
 }
 const bundleId = 'com.hotcodepush.demo.capacitor';
-// A benchmark build is never shipped: offline, the build step writes the resource file without a channel.
+// A benchmark build is never shipped. Offline, the build step writes the resource file without a channel.
 const env = { ...process.env, HOTCODEPUSH_OFFLINE: '1' };
 const marker = '[baseline] first paint';
 
@@ -64,8 +64,7 @@ async function measureAndroid() {
 }
 
 async function measureIos() {
-  // A Debug build, since Capacitor forwards the web view's console to stdout only in debug builds; both variants alike.
-  // The console arrives through a pseudo-terminal: a pipe would buffer the process's stdout until it exits.
+  // The console arrives through a pseudo-terminal, because a pipe would buffer stdout until the process exits.
   const derivedData = join(target, 'ios/App/build-debug');
   execFileSync(
     'xcodebuild',

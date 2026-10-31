@@ -7,7 +7,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** Which page an event reaches: the one that runs, or the one a load the SDK started brings. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class PageEventsTest {

@@ -1,7 +1,6 @@
 #!/usr/bin/env node
-// Copies the demo app into a scratch directory as one of the two variants the baseline compares:
-// `with` installs the plugin tarball, `without` removes the plugin, its Xcode phase and its Gradle line
-// and swaps the screen's script for the same screen with nothing behind it. Both log the first paint.
+// Copies the demo app into a scratch directory as one of the two variants that the baseline compares.
+// `with` installs the plugin tarball. `without` removes the plugin, its Xcode phase and its Gradle line, and keeps the screen without the plugin behind it.
 import { execFileSync } from 'node:child_process';
 import { cpSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -52,7 +51,7 @@ if (variant === 'with') {
     '--no-audit',
     '--no-fund',
   ]);
-  // The build step runs the plugin's own script and Gradle file, both gone with the plugin: the phase and the line go too.
+  // The Xcode phase and the Gradle line run files of the plugin, so they go with it.
   const projectPath = join(target, 'ios/App/App.xcodeproj/project.pbxproj');
   writeFileSync(
     projectPath,
@@ -75,7 +74,7 @@ if (variant === 'with') {
   );
   writeFileSync(
     mainPath,
-    `// The demo without the plugin: the same screen, nothing behind it — the baseline's control.
+    `// The control for the baseline: the same screen without the plugin.
 const VERSION = 'v1';
 
 const versionHeading = getElement('version');

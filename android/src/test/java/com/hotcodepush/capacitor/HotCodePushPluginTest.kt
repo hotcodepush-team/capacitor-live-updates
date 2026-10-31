@@ -32,7 +32,6 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
-/** A call's options and its result, and the pages the WebView begins at the start, over a bridge and a core that record their calls. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class HotCodePushPluginTest {
@@ -110,22 +109,21 @@ class HotCodePushPluginTest {
         }
     }
 
-    /** The plugin's load as the bridge runs it, then the main thread's turn, where the start's events and the page listener go. */
     private fun loadPlugin(): WebViewListener {
         plugin.load()
+        // The start's events and the page listener are posted to the main thread.
         shadowOf(Looper.getMainLooper()).idle()
         val pageStartListener = ArgumentCaptor.forClass(WebViewListener::class.java)
         verify(bridge).addWebViewListener(pageStartListener.capture())
         return pageStartListener.value
     }
 
-    /** A page of the app begins as the bridge reports it: the plugins' listeners dropped, then the WebView's listeners told. */
+    // The bridge drops the plugin listeners before it tells the WebView listeners.
     private fun beginPage(pageStartListener: WebViewListener) {
         plugin.removeAllListeners()
         pageStartListener.onPageStarted(appPage)
     }
 
-    /** The page's JavaScript listening for an event, as `addListener()` arrives from the bridge. */
     private fun listen(eventName: String): PluginCall {
         val call = mock(PluginCall::class.java)
         `when`(call.getString("eventName")).thenReturn(eventName)
@@ -133,7 +131,6 @@ class HotCodePushPluginTest {
         return call
     }
 
-    /** A downloaded bundle laid out and persisted for Capacitor's next load, as the core does through the loader. */
     private fun persistDownloadedBundle(bundleId: String) {
         val loader = CapacitorBundleLoader(context, bridge) {}
         loader.projectionDirectory(bundleId).mkdirs()
@@ -153,7 +150,7 @@ class HotCodePushPluginTest {
         const val RESOURCE_FILE =
             """{"appId":"0b6d5c1e-2f3a-4b5c-8d9e-0f1a2b3c4d5e","channelId":null,"checkIntervalSeconds":60,"builtAt":"2026-10-08T00:00:00.000Z","fingerprint":null,"embeddedBundleManifest":null}"""
 
-        /** How long a test waits for a call's coroutine, which runs on the IO dispatcher. */
+        // Calls run in a coroutine on the IO dispatcher.
         const val CALL_TIMEOUT_MILLIS = 5_000L
 
         val ROLLBACK = UpdateRolledBackEvent(Release("r2", 2, "b2", "1.0.1", false), Release("r1", 1, "b1", "1.0.0", false), RollbackReason.APP_CRASHED)

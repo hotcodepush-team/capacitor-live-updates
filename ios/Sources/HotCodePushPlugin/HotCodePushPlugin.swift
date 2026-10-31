@@ -2,7 +2,7 @@ import Capacitor
 import Foundation
 import HotCodePushCore
 
-// The core ships prebuilt in Release, so the app's debug flag is read here, where the plugin compiles with the app.
+// The core ships as a prebuilt Release build. The plugin compiles with the app, so it reads the debug flag here.
 #if DEBUG
 private let isDebugBuild = true
 #else
@@ -32,12 +32,12 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
     ]
 
     private var core: Core?
-    /// Why every method rejects while the core is absent: the resource file is missing, or the core's reader refused it.
+    // Every method rejects with this while the core is absent: the resource file is missing, or the core refused to read it.
     private var notConfiguredMessage = Configuration.missingMessage
     private lazy var pageEvents = PageEvents(plugin: self)
 
-    /// Runs inside Capacitor's bridge, before its view controller loads the WebView: the start decides the bundle the first load
-    /// serves, waiting for the core at most its bound, so the WebView never loads a bundle the start replaces.
+    // Capacitor calls this before the WebView loads. The start decides the bundle here, with a bounded wait for the core,
+    // so the WebView never loads a bundle that the start replaces.
     override public func load() {
         let configuration: Configuration?
         do {
@@ -70,15 +70,12 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
         core.observeAppLifecycle()
     }
 
-    /// A page of the app began: the events held for it go out, retained until a page listens. A page start the SDK did not request
-    /// is never interpreted, a `location.reload()` or a restarted WebContent process among them: the page serves the bundle of this
-    /// run, a `next_start` release waits for the next process start, and the readiness gate runs from the start.
+    // A page start the SDK did not request, such as `location.reload()` or a restarted WebContent process, is never interpreted.
+    // The page serves the bundle of this run, and a `next_start` release waits for the next process start.
     private func handlePageStart(url: URL) {
         guard let serverURL = bridge?.config.serverURL, url.absoluteString.hasPrefix(serverURL.absoluteString) else { return }
         pageEvents.releaseToPage()
     }
-
-    // MARK: Methods
 
     @objc func applyUpdate(_ call: CAPPluginCall) {
         run(call) { core in try HotCodePushPlugin.jsObject(await core.applyUpdate()) }
@@ -172,7 +169,6 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    /// The shared core's debug screen, presented over the bridge's view controller.
     @objc func showDebugScreen(_ call: CAPPluginCall) {
         guard let core = core else {
             call.reject(notConfiguredMessage)
@@ -192,7 +188,6 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
         run(call) { core in try HotCodePushPlugin.jsObject(await core.sync(trigger: .manual, options: HotCodePushPlugin.syncOptions(from: call))) }
     }
 
-    /// Each stage's strategy for this call; a value outside its choices is a programming mistake and rejects the call.
     static func syncOptions(from call: CAPPluginCall) throws -> SyncOptions {
         return SyncOptions(
             applyStrategy: try option("applyStrategy", call.getString("applyStrategy"), ApplyStrategy.init(rawValue:)),
@@ -200,20 +195,19 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
             mandatoryApplyStrategy: try option("mandatoryApplyStrategy", call.getString("mandatoryApplyStrategy"), MandatoryApplyStrategy.init(rawValue:)))
     }
 
-    /// The apply strategies for this call, the download pinned to `auto`; a value outside its choices rejects the call.
     static func downloadUpdateOptions(from call: CAPPluginCall) throws -> DownloadUpdateOptions {
         return DownloadUpdateOptions(
             applyStrategy: try option("applyStrategy", call.getString("applyStrategy"), ApplyStrategy.init(rawValue:)),
             mandatoryApplyStrategy: try option("mandatoryApplyStrategy", call.getString("mandatoryApplyStrategy"), MandatoryApplyStrategy.init(rawValue:)))
     }
 
+    // A value outside the choices is a programming mistake, so it rejects the call.
     private static func option<T>(_ name: String, _ raw: String?, _ parse: (String) -> T?) throws -> T? {
         guard let raw = raw else { return nil }
         guard let value = parse(raw) else { throw PlainError("\(name) is not one of its choices: \(raw)") }
         return value
     }
 
-    /// Resolves with the body's result, or with no data when a method that returns nothing ends its body in `nil`.
     private func run(_ call: CAPPluginCall, _ body: @escaping (Core) async throws -> JSObject?) {
         guard let core = core else {
             call.reject(notConfiguredMessage)
@@ -257,12 +251,12 @@ extension HotCodePushPlugin: CoreListener {
         deliver("downloadProgress", event)
     }
 
-    /// Retained until the page listens: the event belongs to the page the rollback reloads into.
+    // Retained until a page listens, because the event belongs to the page that the rollback reloads into.
     public func updateRolledBack(_ event: UpdateRolledBackEvent) {
         deliver("updateRolledBack", event, retainUntilConsumed: true)
     }
 
-    /// On the main thread, in order behind the reload the loader starts there, so an event that follows a reload waits for its page.
+    // The main queue orders the event behind the reload that the loader starts there. So an event after a reload waits for its page.
     private func deliver<T: Encodable>(_ eventName: String, _ event: T, retainUntilConsumed: Bool = false) {
         guard let data = try? HotCodePushPlugin.jsObject(event) else { return }
         DispatchQueue.main.async { [weak self] in

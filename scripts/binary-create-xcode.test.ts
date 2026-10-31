@@ -13,7 +13,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 const APP_NAME = 'App.app';
 
-// The plist Xcode's Info.plist processing leaves in the app, converted to the binary format it writes; the values are invented.
+// The processed Info.plist that Xcode leaves in the app, with invented values.
+// The tests convert it to the binary format that Xcode writes.
 const PROCESSED_INFO_PLIST = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -26,13 +27,13 @@ const PROCESSED_INFO_PLIST = `<?xml version="1.0" encoding="UTF-8"?>
 </plist>
 `;
 
-// npx as the script finds it beside Node: it records the arguments, one per line, and its working directory instead of running the CLI.
+// A fake npx for beside Node. Instead of running the CLI, it records its arguments, one per line, and its working directory.
 const RECORDING_NPX =
   '#!/bin/sh\nprintf "%s\\n" "$@" > "$(dirname "$0")/arguments"\npwd > "$(dirname "$0")/directory"\n';
 
 const SCRIPT_PATH = join(import.meta.dirname, 'binary-create-xcode.sh');
 
-// The script runs inside Xcode, which runs on macOS alone, as does PlistBuddy.
+// The script runs inside Xcode, and Xcode and PlistBuddy run on macOS only.
 describe.skipIf(process.platform !== 'darwin')('binary-create-xcode.sh', () => {
   let appPath: string;
   let homePath: string;
@@ -205,9 +206,6 @@ describe.skipIf(process.platform !== 'darwin')('binary-create-xcode.sh', () => {
     expect(() => runScript()).toThrow(/\.xcode\.env/);
   });
 
-  /**
-   * A Node install at the path below the project's directory: a `node` that does nothing and the recording npx beside it.
-   */
   function installNode(relativePath: string): string {
     const directoryPath = join(projectPath, relativePath);
     mkdirSync(directoryPath, { recursive: true });
@@ -222,10 +220,8 @@ describe.skipIf(process.platform !== 'darwin')('binary-create-xcode.sh', () => {
       .split('\n');
   }
 
-  /**
-   * Runs the script with the build settings Xcode gives a phase of the app target and a PATH without Node, as Xcode's own;
-   * HOME and Homebrew's prefix lie inside the project's directory, so no version manager of this machine answers.
-   */
+  // Xcode gives a phase of the app target these build settings and a PATH without Node.
+  // HOME and the Homebrew prefix lie inside the project directory, so no version manager of this machine answers.
   function runScript(environment: Record<string, string> = {}): void {
     execFileSync('/bin/sh', [SCRIPT_PATH], {
       env: {
