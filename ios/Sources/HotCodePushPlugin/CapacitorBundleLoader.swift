@@ -12,7 +12,6 @@ final class CapacitorBundleLoader: BundleLoader {
     private weak var bridge: CAPBridgeProtocol?
     private let willLoadPage: () -> Void
     private let lock = NSLock()
-    private let networkMonitor = NetworkMonitor()
     // Until the first load, this is the bundle that load will serve. `nil` means the embedded bundle.
     private var servedBundle: String?
     // Until the start has decided, a switch only changes what the first load serves. After that, a switch reloads the WebView.
@@ -52,10 +51,6 @@ final class CapacitorBundleLoader: BundleLoader {
 
     func servedBundleId() -> String? {
         return locked { servedBundle }
-    }
-
-    func isConnectionMetered() -> Bool {
-        return networkMonitor.isConnectionMetered()
     }
 
     // Runs on the main thread once the start has decided and before the WebView loads.

@@ -8,7 +8,6 @@ import com.getcapacitor.Bridge
 import com.getcapacitor.plugin.WebView
 import com.hotcodepush.core.BundleLoader
 import com.hotcodepush.core.FileStore
-import com.hotcodepush.core.NetworkMonitor
 import com.hotcodepush.core.ServedBundle
 import java.io.File
 
@@ -17,7 +16,6 @@ import java.io.File
 class CapacitorBundleLoader(private val context: Context, private val bridge: Bridge, private val willLoadPage: () -> Unit) : BundleLoader {
     private val projectionsDirectory = File(FileStore.defaultRootDirectory(context), "www")
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val networkMonitor = NetworkMonitor(context)
 
     // Until the first load, this is the bundle that load will serve. `null` means the embedded bundle.
     private var servedBundle: String? = resolvePersistedBundleId()
@@ -45,8 +43,6 @@ class CapacitorBundleLoader(private val context: Context, private val bridge: Br
     }
 
     override fun servedBundleId(): String? = synchronized(this) { servedBundle }
-
-    override fun isConnectionMetered(): Boolean = networkMonitor.isConnectionMetered()
 
     // Runs on the main thread in `load()`, once the start has decided. The first load of the bridge reads the bundle from the preferences.
     fun beginServing() {

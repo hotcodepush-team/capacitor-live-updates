@@ -130,10 +130,10 @@ class HotCodePushPlugin : Plugin(), CoreListener {
     fun downloadUpdate(call: PluginCall) = run(call) { it.downloadUpdate(downloadUpdateOptions(call)).toJson() }
 
     @PluginMethod
-    fun getChannel(call: PluginCall) = run(call) { it.channel().toJson() }
+    fun getChannel(call: PluginCall) = run(call) { it.getChannel().toJson() }
 
     @PluginMethod
-    fun getDevice(call: PluginCall) = run(call) { it.deviceResult().toJson() }
+    fun getDevice(call: PluginCall) = run(call) { it.getDevice().toJson() }
 
     @PluginMethod
     fun getState(call: PluginCall) = run(call) { it.getState().toJson() }

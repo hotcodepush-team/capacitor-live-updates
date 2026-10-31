@@ -155,11 +155,7 @@ describe.skipIf(process.platform !== 'darwin')('binary-create-xcode.sh', () => {
   });
 
   it('should find Node through nvm when no .xcode.env names it', () => {
-    const nodeDirectoryPath = installNode('home/.nvm/versions/node/v24/bin');
-    writeExecutable(
-      join(homePath, '.nvm', 'nvm.sh'),
-      `nvm() { PATH="${nodeDirectoryPath}:$PATH"; }\n`,
-    );
+    const nodeDirectoryPath = installNvmNode();
 
     runScript();
 
@@ -181,7 +177,7 @@ describe.skipIf(process.platform !== 'darwin')('binary-create-xcode.sh', () => {
   });
 
   it('should find Node through asdf when no .xcode.env names it', () => {
-    const nodeDirectoryPath = installNode('home/.asdf/shims');
+    const nodeDirectoryPath = installAsdfNode();
 
     runScript();
 
@@ -189,7 +185,7 @@ describe.skipIf(process.platform !== 'darwin')('binary-create-xcode.sh', () => {
   });
 
   it('should find Node through Volta when no .xcode.env names it', () => {
-    const nodeDirectoryPath = installNode('home/.volta/bin');
+    const nodeDirectoryPath = installVoltaNode();
 
     runScript();
 
@@ -197,11 +193,7 @@ describe.skipIf(process.platform !== 'darwin')('binary-create-xcode.sh', () => {
   });
 
   it('should find Node through fnm when no .xcode.env names it', () => {
-    const nodeDirectoryPath = installNode('home/.fnm/aliases/default/bin');
-    writeExecutable(
-      join(homePath, '.fnm', 'fnm'),
-      `#!/bin/sh\necho 'export PATH="${nodeDirectoryPath}:$PATH"'\n`,
-    );
+    const nodeDirectoryPath = installFnmNode();
 
     runScript();
 
@@ -209,12 +201,40 @@ describe.skipIf(process.platform !== 'darwin')('binary-create-xcode.sh', () => {
   });
 
   it("should find Node in Homebrew's bin when no .xcode.env names it", () => {
-    const nodeDirectoryPath = installNode('homebrew/bin');
+    const nodeDirectoryPath = installHomebrewNode();
 
     runScript();
 
     expect(readArguments(nodeDirectoryPath)[0]).toBe('hotcodepush');
   });
+
+  it('should search the Apple silicon Homebrew prefix before the Intel one', () => {
+    const appleSiliconNodePath = installNode('opt/homebrew/bin');
+    installNode('usr/local/bin');
+
+    runScript({
+      HOMEBREW_PREFIX: `${join(projectPath, 'opt', 'homebrew')} ${join(projectPath, 'usr', 'local')}`,
+    });
+
+    expect(readArguments(appleSiliconNodePath)[0]).toBe('hotcodepush');
+  });
+
+  it.each([
+    ['Homebrew', 'nvm', installHomebrewNode, installNvmNode],
+    ['nvm', 'fnm', installNvmNode, installFnmNode],
+    ['fnm', 'Volta', installFnmNode, installVoltaNode],
+    ['Volta', 'asdf', installVoltaNode, installAsdfNode],
+  ])(
+    'should take the Node of %s before the one of %s',
+    (_first, _second, installFirst, installSecond) => {
+      const nodeDirectoryPath = installFirst();
+      installSecond();
+
+      runScript();
+
+      expect(readArguments(nodeDirectoryPath)[0]).toBe('hotcodepush');
+    },
+  );
 
   it('should fail naming .xcode.env when no Node is found', () => {
     expect(() => runScript()).toThrow(/\.xcode\.env/);
@@ -226,6 +246,36 @@ describe.skipIf(process.platform !== 'darwin')('binary-create-xcode.sh', () => {
     writeExecutable(join(directoryPath, 'node'), '#!/bin/sh\n');
     writeExecutable(join(directoryPath, 'npx'), RECORDING_NPX);
     return directoryPath;
+  }
+
+  function installHomebrewNode(): string {
+    return installNode('homebrew/bin');
+  }
+
+  function installNvmNode(): string {
+    const nodeDirectoryPath = installNode('home/.nvm/versions/node/v24/bin');
+    writeExecutable(
+      join(homePath, '.nvm', 'nvm.sh'),
+      `nvm() { PATH="${nodeDirectoryPath}:$PATH"; }\n`,
+    );
+    return nodeDirectoryPath;
+  }
+
+  function installFnmNode(): string {
+    const nodeDirectoryPath = installNode('home/.fnm/aliases/default/bin');
+    writeExecutable(
+      join(homePath, '.fnm', 'fnm'),
+      `#!/bin/sh\necho 'export PATH="${nodeDirectoryPath}:$PATH"'\n`,
+    );
+    return nodeDirectoryPath;
+  }
+
+  function installVoltaNode(): string {
+    return installNode('home/.volta/bin');
+  }
+
+  function installAsdfNode(): string {
+    return installNode('home/.asdf/shims');
   }
 
   function readArguments(nodeDirectoryPath: string): string[] {
