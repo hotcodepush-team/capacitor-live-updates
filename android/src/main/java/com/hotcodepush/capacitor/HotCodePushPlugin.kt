@@ -39,6 +39,7 @@ import org.json.JSONObject
 @CapacitorPlugin(name = "HotCodePush")
 class HotCodePushPlugin : Plugin(), CoreListener {
     private var core: Core? = null
+    private var hasPaused = false
     private var loader: CapacitorBundleLoader? = null
     private val scheduler = HandlerScheduler()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -93,12 +94,15 @@ class HotCodePushPlugin : Plugin(), CoreListener {
 
     override fun handleOnPause() {
         super.handleOnPause()
+        hasPaused = true
         val core = core ?: return
         scope.launch { core.handleAppPause() }
     }
 
+    // Capacitor also resumes plugins at the activity's first resume, which is the start, not a return from the background.
     override fun handleOnResume() {
         super.handleOnResume()
+        if (!hasPaused) return
         val core = core ?: return
         scope.launch { core.handleAppResume() }
     }
@@ -255,6 +259,6 @@ class HotCodePushPlugin : Plugin(), CoreListener {
     }
 
     companion object {
-        const val TAG = "HotCodePush"
+        private const val TAG = "HotCodePush"
     }
 }

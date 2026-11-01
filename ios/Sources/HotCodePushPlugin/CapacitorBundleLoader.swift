@@ -13,7 +13,7 @@ final class CapacitorBundleLoader: BundleLoader {
     private let willLoadPage: () -> Void
     private let lock = NSLock()
     // Until the first load, this is the bundle that load will serve. `nil` means the embedded bundle.
-    private var servedBundle: String?
+    private var _servedBundleId: String?
     // Until the start has decided, a switch only changes what the first load serves. After that, a switch reloads the WebView.
     private var isServing = false
 
@@ -21,7 +21,7 @@ final class CapacitorBundleLoader: BundleLoader {
     init(bridge: CAPBridgeProtocol, willLoadPage: @escaping () -> Void) {
         self.bridge = bridge
         self.willLoadPage = willLoadPage
-        servedBundle = CapacitorBundleLoader.resolveBundleId(path: bridge.config.appLocation.path)
+        _servedBundleId = CapacitorBundleLoader.resolveBundleId(path: bridge.config.appLocation.path)
     }
 
     func projectionDirectory(bundleId: String) -> URL {
@@ -39,7 +39,7 @@ final class CapacitorBundleLoader: BundleLoader {
     func loadServedBundle(bundleId: String?) {
         persistServedBundle(bundleId: bundleId)
         let isReload = locked { () -> Bool in
-            servedBundle = bundleId
+            _servedBundleId = bundleId
             return isServing
         }
         if isReload {
@@ -50,7 +50,7 @@ final class CapacitorBundleLoader: BundleLoader {
     }
 
     func servedBundleId() -> String? {
-        return locked { servedBundle }
+        return locked { _servedBundleId }
     }
 
     // Runs on the main thread once the start has decided and before the WebView loads.
@@ -58,7 +58,7 @@ final class CapacitorBundleLoader: BundleLoader {
     func beginServing() {
         let bundleId = locked { () -> String? in
             isServing = true
-            return servedBundle
+            return _servedBundleId
         }
         willLoadPage()
         bridge?.setServerBasePath(CapacitorBundleLoader.basePath(bundleId: bundleId))

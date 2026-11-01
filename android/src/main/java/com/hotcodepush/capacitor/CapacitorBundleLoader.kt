@@ -18,7 +18,7 @@ class CapacitorBundleLoader(private val context: Context, private val bridge: Br
     private val mainHandler = Handler(Looper.getMainLooper())
 
     // Until the first load, this is the bundle that load will serve. `null` means the embedded bundle.
-    private var servedBundle: String? = resolvePersistedBundleId()
+    private var servedBundleId: String? = resolvePersistedBundleId()
 
     // Until the start has decided, a switch only changes what the first load serves. After that, a switch reloads the WebView.
     private var isServing = false
@@ -36,19 +36,19 @@ class CapacitorBundleLoader(private val context: Context, private val bridge: Br
     override fun loadServedBundle(bundleId: String?) {
         persistServedBundle(bundleId)
         val isReload = synchronized(this) {
-            servedBundle = bundleId
+            servedBundleId = bundleId
             isServing
         }
         if (isReload) mainHandler.post { reloadWebView(bundleId) }
     }
 
-    override fun servedBundleId(): String? = synchronized(this) { servedBundle }
+    override fun servedBundleId(): String? = synchronized(this) { servedBundleId }
 
     // Runs on the main thread in `load()`, once the start has decided. The first load of the bridge reads the bundle from the preferences.
     fun beginServing() {
         val bundleId = synchronized(this) {
             isServing = true
-            servedBundle
+            servedBundleId
         }
         persistServedBundle(bundleId)
         willLoadPage()
