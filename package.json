@@ -83,7 +83,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@hotcodepush/protocol": "https://pkg.pr.new/hotcodepush-team/protocol/@hotcodepush/protocol@f6b26e1"
+    "@hotcodepush/protocol": "https://pkg.pr.new/hotcodepush-team/protocol/@hotcodepush/protocol@9c38d6a"
   },
   "overrides": {
     "xcode": {
