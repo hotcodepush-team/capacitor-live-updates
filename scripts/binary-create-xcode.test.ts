@@ -176,21 +176,19 @@ describe.skipIf(process.platform !== 'darwin')('binary-create-xcode.sh', () => {
     expect(readArguments(nodeDirectoryPath)[0]).toBe('hotcodepush');
   });
 
-  it('should find Node through asdf when no .xcode.env names it', () => {
-    const nodeDirectoryPath = installAsdfNode();
+  it.each([
+    ['Volta', installVoltaNode],
+    ['asdf', installAsdfNode],
+  ])(
+    'should find Node through %s when no .xcode.env names it',
+    (_name, installManagerNode) => {
+      const nodeDirectoryPath = installManagerNode();
 
-    runScript();
+      runScript();
 
-    expect(readArguments(nodeDirectoryPath)[0]).toBe('hotcodepush');
-  });
-
-  it('should find Node through Volta when no .xcode.env names it', () => {
-    const nodeDirectoryPath = installVoltaNode();
-
-    runScript();
-
-    expect(readArguments(nodeDirectoryPath)[0]).toBe('hotcodepush');
-  });
+      expect(readArguments(nodeDirectoryPath)[0]).toBe('hotcodepush');
+    },
+  );
 
   it('should find Node through fnm when no .xcode.env names it', () => {
     const nodeDirectoryPath = installFnmNode();
