@@ -49,6 +49,8 @@ The shared types come from `@hotcodepush/protocol` the same way, pinned to a com
 - The Capacitor constraint on iOS: a served bundle is laid out under `Library/NoCloud/ionic_built_snapshots/<bundleId>`, the only place Capacitor resolves its persisted base path.
 - A page start the plugin did not request is never interpreted: `location.reload()`, a restarted WebContent process and Capacitor's second load of a persisted `serverBasePath` at an Android start all serve the running process's bundle. A `next_start` release applies at the next start, where the readiness gate runs with the first render as its signal.
 - Only a reload the SDK performs holds its events for the page that follows, and a held event goes out retained, which Capacitor keeps across a page's reset, so a page replaced before it listens leaves them to the next page.
+- A test earns its place by catching a bug nothing else catches, at the lowest layer that can prove it; one test per branch, never per value, and nothing for what the types, the framework or a library guarantee.
+- A new test names the behaviour or the bug it proves; if deleting the production code would not fail it, it does not get in.
 
 ## Comments
 
