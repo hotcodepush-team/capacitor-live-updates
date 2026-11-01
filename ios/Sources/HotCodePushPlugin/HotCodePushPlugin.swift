@@ -2,7 +2,7 @@ import Capacitor
 import Foundation
 import HotCodePushCore
 
-// The core ships as a prebuilt Release build. The plugin compiles with the app, so it reads the debug flag here.
+// The core ships as a prebuilt Release build. The SDK compiles with the app, so it reads the debug flag here.
 #if DEBUG
 private let isDebugBuild = true
 #else
@@ -188,14 +188,14 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
         run(call) { core in try HotCodePushPlugin.jsObject(await core.sync(trigger: .manual, options: HotCodePushPlugin.syncOptions(from: call))) }
     }
 
-    static func syncOptions(from call: CAPPluginCall) throws -> SyncOptions {
+    private static func syncOptions(from call: CAPPluginCall) throws -> SyncOptions {
         return SyncOptions(
             applyStrategy: try option("applyStrategy", call.getString("applyStrategy"), ApplyStrategy.init(rawValue:)),
             downloadStrategy: try option("downloadStrategy", call.getString("downloadStrategy"), DownloadStrategy.init(rawValue:)),
             mandatoryApplyStrategy: try option("mandatoryApplyStrategy", call.getString("mandatoryApplyStrategy"), MandatoryApplyStrategy.init(rawValue:)))
     }
 
-    static func downloadUpdateOptions(from call: CAPPluginCall) throws -> DownloadUpdateOptions {
+    private static func downloadUpdateOptions(from call: CAPPluginCall) throws -> DownloadUpdateOptions {
         return DownloadUpdateOptions(
             applyStrategy: try option("applyStrategy", call.getString("applyStrategy"), ApplyStrategy.init(rawValue:)),
             mandatoryApplyStrategy: try option("mandatoryApplyStrategy", call.getString("mandatoryApplyStrategy"), MandatoryApplyStrategy.init(rawValue:)))
@@ -226,7 +226,7 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    static func jsObject<T: Encodable>(_ value: T) throws -> JSObject {
+    private static func jsObject<T: Encodable>(_ value: T) throws -> JSObject {
         guard let js = JSTypes.coerceDictionaryToJSObject(try Json.encodeObject(value)) else {
             throw PlainError("The result could not be encoded")
         }

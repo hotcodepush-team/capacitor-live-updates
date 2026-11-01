@@ -259,6 +259,6 @@ class HotCodePushPlugin : Plugin(), CoreListener {
     }
 
     companion object {
-        const val TAG = "HotCodePush"
+        private const val TAG = "HotCodePush"
     }
 }

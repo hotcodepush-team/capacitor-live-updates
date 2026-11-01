@@ -13,14 +13,14 @@ abstract class HotCodePushBinaryCreateTask extends DefaultTask {
     @InputDirectory
     abstract DirectoryProperty getEmbeddedAssetsDirectory()
 
+    @Input
+    abstract Property<Boolean> getIsStoreBuild()
+
     @OutputDirectory
     abstract DirectoryProperty getOutputDirectory()
 
     @Internal
     abstract DirectoryProperty getProjectRoot()
-
-    @Input
-    abstract Property<Boolean> getStoreBuild()
 
     @Inject
     abstract ExecOperations getExecOperations()
@@ -28,7 +28,7 @@ abstract class HotCodePushBinaryCreateTask extends DefaultTask {
     @TaskAction
     void createBinary() {
         def npx = Os.isFamily(Os.FAMILY_WINDOWS) ? ['cmd', '/c', 'npx'] : ['npx']
-        def command = storeBuild.get()
+        def command = isStoreBuild.get()
             ? ['binary', 'create', '--binary-version', binaryVersion.get(), '--binary-build', binaryBuild.get()]
             : ['resource-file', 'write']
         execOperations.exec {
@@ -51,7 +51,7 @@ androidComponents.onVariants(androidComponents.selector().all()) { variant ->
         // `npx cap sync` copies the web build here. Capacitor serves every variant from src/main.
         it.embeddedAssetsDirectory.set(layout.projectDirectory.dir('src/main/assets/public'))
         // A store build is any build type other than debug.
-        it.storeBuild.set(variant.buildType != 'debug')
+        it.isStoreBuild.set(variant.buildType != 'debug')
         // The Capacitor Android project sits in android/, one level below package.json and hotcodepush.json.
         it.projectRoot.set(rootProject.layout.projectDirectory.dir('..'))
         // The resource file carries the build time as the floor, and a store build creates its binary on every run.
