@@ -41,12 +41,13 @@
     "Package.swift"
   ],
   "scripts": {
-    "build": "npm run clean && node scripts/write-sdk-version.mjs && node scripts/download-core-ios.mjs && tsc && rollup -c rollup.config.mjs",
+    "build": "npm run clean && node scripts/write-sdk-version.mjs && node scripts/download-core-ios.mjs && tsc --project tsconfig.build.json && rollup -c rollup.config.mjs",
     "clean": "rimraf ./dist",
     "fmt": "eslint . --fix && prettier --write . && swiftlint --fix --quiet ios",
     "lint": "eslint . && prettier --check . && swiftlint lint --quiet --strict ios",
     "test": "vitest run",
-    "verify": "npm run lint && npm test && npm run build",
+    "typecheck": "tsc --noEmit",
+    "verify": "npm run lint && npm run typecheck && npm test && npm run build",
     "verify:android": "node scripts/write-sdk-version.mjs && cd android && ./gradlew build --console=plain",
     "verify:ios": "node scripts/write-sdk-version.mjs && xcodebuild -scheme HotcodepushCapacitorLiveUpdates -destination generic/platform=iOS -quiet build"
   },
@@ -59,6 +60,7 @@
     "eslint": "10.11.0",
     "eslint-import-resolver-typescript": "4.4.5",
     "eslint-plugin-import-x": "4.17.1",
+    "pkg-pr-new": "0.0.88",
     "prettier": "3.9.8",
     "rimraf": "6.1.2",
     "rollup": "4.65.0",
