@@ -39,17 +39,7 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
     // Capacitor calls this before the WebView loads. The start decides the bundle here, with a bounded wait for the core,
     // so the WebView never loads a bundle that the start replaces.
     override public func load() {
-        let configuration: Configuration?
-        do {
-            configuration = try Configuration.read()
-        } catch {
-            notConfiguredMessage = Configuration.resolveRefusedMessage(error)
-            configuration = nil
-        }
-        guard let configuration = configuration, let bridge = bridge else {
-            CAPLog.print("[HotCodePush] ", notConfiguredMessage)
-            return
-        }
+        guard let configuration = loadConfiguration(), let bridge = bridge else { return }
         let loader = CapacitorBundleLoader(bridge: bridge) { [weak self] in
             self?.pageEvents.holdUntilNextPage()
         }
@@ -68,6 +58,17 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
             }
         }
         core.observeAppLifecycle()
+    }
+
+    private func loadConfiguration() -> Configuration? {
+        switch Configuration.load() {
+        case .loaded(let configuration):
+            return configuration
+        case .notConfigured(let message):
+            notConfiguredMessage = message
+            CAPLog.print("[HotCodePush] ", message)
+            return nil
+        }
     }
 
     // A page start the SDK did not request, such as `location.reload()` or a restarted WebContent process, is never interpreted.

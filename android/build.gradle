@@ -61,7 +61,7 @@ rootProject.allprojects {
 dependencies {
     implementation project(':capacitor-android')
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
-    implementation 'com.hotcodepush:core-android:0.1.1'
+    implementation 'com.hotcodepush:core-android:0.2.0'
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:$kotlinxCoroutinesVersion"
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.mockito:mockito-core:5.20.0'

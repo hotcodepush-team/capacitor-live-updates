@@ -83,8 +83,8 @@
   },
   "hotcodepush": {
     "coreAndroid": {
-      "version": "0.1.1",
-      "checksum": "f6ce90f6745519c6900d592b17872b94ba06213c964a5ac05df6d3866df6940f"
+      "version": "0.2.0",
+      "checksum": "df915251521fcd0b519be9cfe1b5fb1896efb30954e885816573f26bb4a8b142"
     }
   },
   "publishConfig": {

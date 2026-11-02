@@ -13,6 +13,7 @@ import com.hotcodepush.core.ApplyStrategy
 import com.hotcodepush.core.AssetsEmbeddedBundle
 import com.hotcodepush.core.ChannelChoice
 import com.hotcodepush.core.Configuration
+import com.hotcodepush.core.ConfigurationLoadResult
 import com.hotcodepush.core.Core
 import com.hotcodepush.core.CoreListener
 import com.hotcodepush.core.DebugScreen
@@ -59,16 +60,7 @@ class HotCodePushPlugin : Plugin(), CoreListener {
     // Capacitor calls this while it builds the bridge, before the WebView loads. The start decides the bundle here, with a bounded
     // wait for the core, so the WebView never loads a bundle that the start replaces.
     override fun load() {
-        val configuration = try {
-            Configuration.read(context)
-        } catch (exception: Exception) {
-            notConfiguredMessage = Configuration.resolveRefusedMessage(exception)
-            null
-        }
-        if (configuration == null) {
-            Logger.error(TAG, notConfiguredMessage, null)
-            return
-        }
+        val configuration = loadConfiguration() ?: return
         val loader = CapacitorBundleLoader(context = context, bridge = bridge, willLoadPage = { pageEvents.holdUntilNextPage() })
         val core = Core(
             context = context,
@@ -90,6 +82,15 @@ class HotCodePushPlugin : Plugin(), CoreListener {
         loader.beginServing()
         // The bridge takes its WebView listeners from its builder once it is built, which replaces any added while it builds.
         mainHandler.post { bridge.addWebViewListener(pageStartListener) }
+    }
+
+    private fun loadConfiguration(): Configuration? = when (val result = Configuration.load(context)) {
+        is ConfigurationLoadResult.Loaded -> result.configuration
+        is ConfigurationLoadResult.NotConfigured -> {
+            notConfiguredMessage = result.message
+            Logger.error(TAG, result.message, null)
+            null
+        }
     }
 
     // Held events go out retained, because Capacitor loads a downloaded bundle twice at the start and replaces the first page before it listens.
