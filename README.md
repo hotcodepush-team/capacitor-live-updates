@@ -45,7 +45,7 @@ See [hotcodepush.com/docs/sdks/capacitor](https://hotcodepush.com/docs/sdks/capa
 ```sh
 nvm use
 npm ci
-npm run build            # the TypeScript into dist/ and the iOS core into ios/Frameworks; run it before opening the native projects
+npm run build            # the TypeScript into dist/ and the cores into ios/Frameworks and android/libs; run it before opening the native projects
 npm run lint
 npm test                 # the Xcode build step's script tests, macOS only
 npm run verify:ios       # the iOS build

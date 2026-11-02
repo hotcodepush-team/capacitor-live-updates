@@ -30,25 +30,27 @@
     "android/src/main/",
     "android/build.gradle",
     "android/hotcodepush.gradle",
+    "android/libs/m2/",
     "dist/",
     "ios/Frameworks/HotCodePushCore.xcframework/",
     "ios/Sources/",
     "scripts/",
     "!scripts/*.test.ts",
+    "!scripts/download-core-android.mjs",
     "!scripts/download-core-ios.mjs",
     "!scripts/write-sdk-version.mjs",
     "HotcodepushCapacitorLiveUpdates.podspec",
     "Package.swift"
   ],
   "scripts": {
-    "build": "npm run clean && node scripts/write-sdk-version.mjs && node scripts/download-core-ios.mjs && tsc --project tsconfig.build.json && rollup -c rollup.config.mjs",
+    "build": "npm run clean && node scripts/write-sdk-version.mjs && node scripts/download-core-android.mjs && node scripts/download-core-ios.mjs && tsc --project tsconfig.build.json && rollup -c rollup.config.mjs",
     "clean": "rimraf ./dist",
     "fmt": "eslint . --fix && prettier --write . && swiftlint --fix --quiet ios",
     "lint": "eslint . && prettier --check . && swiftlint lint --quiet --strict ios",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "verify": "npm run lint && npm run typecheck && npm test && npm run build",
-    "verify:android": "node scripts/write-sdk-version.mjs && cd android && ./gradlew build --console=plain",
+    "verify:android": "node scripts/write-sdk-version.mjs && node scripts/download-core-android.mjs && cd android && ./gradlew build --console=plain",
     "verify:ios": "node scripts/write-sdk-version.mjs && xcodebuild -scheme HotcodepushCapacitorLiveUpdates -destination generic/platform=iOS -quiet build"
   },
   "devDependencies": {
@@ -77,6 +79,12 @@
     },
     "android": {
       "src": "android"
+    }
+  },
+  "hotcodepush": {
+    "coreAndroid": {
+      "version": "0.1.0",
+      "checksum": "7c9b91381c5c99bf9e2592fd14e912972f0bb8f3df1b0a3c340a75ca5ef3a65b"
     }
   },
   "publishConfig": {
