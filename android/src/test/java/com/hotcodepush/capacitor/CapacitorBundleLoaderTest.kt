@@ -24,7 +24,7 @@ class CapacitorBundleLoaderTest {
     private val context: Context = RuntimeEnvironment.getApplication()
     private val bridge: Bridge = mock(Bridge::class.java)
     private var pageLoads = 0
-    private val loader by lazy { CapacitorBundleLoader(context, bridge) { pageLoads++ } }
+    private val loader by lazy { CapacitorBundleLoader(context = context, bridge = bridge, willLoadPage = { pageLoads++ }) }
 
     @Test
     fun shouldServeThePersistedBundleAtTheStartWhenItsTreeIsOnDisk() {

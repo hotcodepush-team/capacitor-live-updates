@@ -190,20 +190,20 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
 
     private static func syncOptions(from call: CAPPluginCall) throws -> SyncOptions {
         return SyncOptions(
-            applyStrategy: try option("applyStrategy", call.getString("applyStrategy"), ApplyStrategy.init(rawValue:)),
-            downloadStrategy: try option("downloadStrategy", call.getString("downloadStrategy"), DownloadStrategy.init(rawValue:)),
-            mandatoryApplyStrategy: try option("mandatoryApplyStrategy", call.getString("mandatoryApplyStrategy"), MandatoryApplyStrategy.init(rawValue:)))
+            applyStrategy: try option(in: call, named: "applyStrategy", parse: ApplyStrategy.init(rawValue:)),
+            downloadStrategy: try option(in: call, named: "downloadStrategy", parse: DownloadStrategy.init(rawValue:)),
+            mandatoryApplyStrategy: try option(in: call, named: "mandatoryApplyStrategy", parse: MandatoryApplyStrategy.init(rawValue:)))
     }
 
     private static func downloadUpdateOptions(from call: CAPPluginCall) throws -> DownloadUpdateOptions {
         return DownloadUpdateOptions(
-            applyStrategy: try option("applyStrategy", call.getString("applyStrategy"), ApplyStrategy.init(rawValue:)),
-            mandatoryApplyStrategy: try option("mandatoryApplyStrategy", call.getString("mandatoryApplyStrategy"), MandatoryApplyStrategy.init(rawValue:)))
+            applyStrategy: try option(in: call, named: "applyStrategy", parse: ApplyStrategy.init(rawValue:)),
+            mandatoryApplyStrategy: try option(in: call, named: "mandatoryApplyStrategy", parse: MandatoryApplyStrategy.init(rawValue:)))
     }
 
     // A value outside the choices is a programming mistake, so it rejects the call.
-    private static func option<T>(_ name: String, _ raw: String?, _ parse: (String) -> T?) throws -> T? {
-        guard let raw = raw else { return nil }
+    private static func option<T>(in call: CAPPluginCall, named name: String, parse: (String) -> T?) throws -> T? {
+        guard let raw = call.getString(name) else { return nil }
         guard let value = parse(raw) else { throw PlainError("\(name) is not one of its choices: \(raw)") }
         return value
     }

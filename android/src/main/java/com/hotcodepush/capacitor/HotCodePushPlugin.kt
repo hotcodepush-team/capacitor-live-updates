@@ -69,12 +69,16 @@ class HotCodePushPlugin : Plugin(), CoreListener {
             Logger.error(TAG, notConfiguredMessage, null)
             return
         }
-        val loader = CapacitorBundleLoader(context, bridge) { pageEvents.holdUntilNextPage() }
+        val loader = CapacitorBundleLoader(context = context, bridge = bridge, willLoadPage = { pageEvents.holdUntilNextPage() })
         val core = Core(
             context = context,
             configuration = configuration,
             device = DeviceFacts.current(context, SDK_VERSION),
-            embedded = AssetsEmbeddedBundle(context, configuration.embeddedBundleManifest, CapacitorBundleLoader.EMBEDDED_ASSET_PATH),
+            embedded = AssetsEmbeddedBundle(
+                context = context,
+                manifest = configuration.embeddedBundleManifest,
+                assetDirectory = CapacitorBundleLoader.EMBEDDED_ASSET_PATH,
+            ),
             loader = loader,
             listener = this,
             scope = scope,
@@ -210,19 +214,19 @@ class HotCodePushPlugin : Plugin(), CoreListener {
     fun sync(call: PluginCall) = run(call) { it.sync(SyncTrigger.MANUAL, syncOptions(call)).toJson() }
 
     private fun syncOptions(call: PluginCall) = SyncOptions(
-        applyStrategy = option("applyStrategy", call.getString("applyStrategy"), ApplyStrategy::fromWire),
-        downloadStrategy = option("downloadStrategy", call.getString("downloadStrategy"), DownloadStrategy::fromWire),
-        mandatoryApplyStrategy = option("mandatoryApplyStrategy", call.getString("mandatoryApplyStrategy"), MandatoryApplyStrategy::fromWire),
+        applyStrategy = option(call, name = "applyStrategy", parse = ApplyStrategy::fromWire),
+        downloadStrategy = option(call, name = "downloadStrategy", parse = DownloadStrategy::fromWire),
+        mandatoryApplyStrategy = option(call, name = "mandatoryApplyStrategy", parse = MandatoryApplyStrategy::fromWire),
     )
 
     private fun downloadUpdateOptions(call: PluginCall) = DownloadUpdateOptions(
-        applyStrategy = option("applyStrategy", call.getString("applyStrategy"), ApplyStrategy::fromWire),
-        mandatoryApplyStrategy = option("mandatoryApplyStrategy", call.getString("mandatoryApplyStrategy"), MandatoryApplyStrategy::fromWire),
+        applyStrategy = option(call, name = "applyStrategy", parse = ApplyStrategy::fromWire),
+        mandatoryApplyStrategy = option(call, name = "mandatoryApplyStrategy", parse = MandatoryApplyStrategy::fromWire),
     )
 
     // A value outside the choices is a programming mistake, so it rejects the call.
-    private fun <T> option(name: String, raw: String?, parse: (String?) -> T?): T? {
-        if (raw == null) return null
+    private fun <T> option(call: PluginCall, name: String, parse: (String?) -> T?): T? {
+        val raw = call.getString(name) ?: return null
         return parse(raw) ?: throw PlainException("$name is not one of its choices: $raw")
     }
 
@@ -255,7 +259,7 @@ class HotCodePushPlugin : Plugin(), CoreListener {
 
     // The main thread orders the event behind the reload that the loader starts there. So an event after a reload waits for its page.
     private fun deliver(eventName: String, data: JSObject, retainUntilConsumed: Boolean = false) {
-        mainHandler.post { pageEvents.deliver(eventName, data, retainUntilConsumed) }
+        mainHandler.post { pageEvents.deliver(eventName, data, retainUntilConsumed = retainUntilConsumed) }
     }
 
     companion object {
