@@ -15,8 +15,8 @@ let package = Package(
     targets: [
         .binaryTarget(
             name: "HotCodePushCore",
-            url: "https://github.com/hotcodepush-team/core-ios/releases/download/0.3.0/HotCodePushCore.xcframework.zip",
-            checksum: "6d12e0613ce25748963f0ff492a6e33687a25bf291d94e2950d5b1867bbc3685"),
+            url: "https://github.com/hotcodepush-team/core-ios/releases/download/0.4.0/HotCodePushCore.xcframework.zip",
+            checksum: "0ac3338f1f8e0e2c4c79cf5cb00d70a078fd25a17e2586fc7ff1edee7166d941"),
         .target(
             name: "HotCodePushPlugin",
             dependencies: [
