@@ -132,7 +132,7 @@ class HotCodePushPluginTest {
     }
 
     private fun persistDownloadedBundle(bundleId: String) {
-        val loader = CapacitorBundleLoader(context, bridge) {}
+        val loader = CapacitorBundleLoader(context = context, bridge = bridge, willLoadPage = {})
         loader.projectionDirectory(bundleId).mkdirs()
         loader.persistServedBundle(bundleId)
     }
