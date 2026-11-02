@@ -46,12 +46,13 @@ repositories {
     mavenCentral()
 }
 
-// The core comes from the maven branch of core-android until the library is on Maven Central.
-// The app resolves the core too, so every project of the app build lists the branch, for the core group only.
+// The core comes from its release asset, which scripts/download-core-android.mjs unpacks into libs/m2.
+// The app resolves the core too, so every project of the app build lists the local repository, for the core group only.
+def coreRepository = file('libs/m2')
 rootProject.allprojects {
     repositories {
         maven {
-            url 'https://raw.githubusercontent.com/hotcodepush-team/core-android/maven/'
+            url = coreRepository
             content { includeGroup 'com.hotcodepush' }
         }
     }
@@ -60,7 +61,7 @@ rootProject.allprojects {
 dependencies {
     implementation project(':capacitor-android')
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
-    implementation 'com.hotcodepush:core-android:a5bfc4aeede98739302f49510766a6f5decb9299'
+    implementation 'com.hotcodepush:core-android:0.1.0'
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:$kotlinxCoroutinesVersion"
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.mockito:mockito-core:5.20.0'
