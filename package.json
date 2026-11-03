@@ -1,7 +1,7 @@
 {
   "name": "@hotcodepush/capacitor-live-updates",
   "version": "0.0.0",
-  "description": "Capacitor live updates by HotCodePush: the plugin that delivers over-the-air updates to your Capacitor app",
+  "description": "Capacitor live updates by HotCodePush: the plugin that delivers over-the-air (OTA) updates to your Capacitor app",
   "type": "module",
   "license": "MIT",
   "author": "Genz IT Solutions GmbH",
