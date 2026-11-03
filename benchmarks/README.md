@@ -28,7 +28,7 @@ The simulator app grows by about 3.4 MB, nearly all of it in the `App` binary: t
 
 ```sh
 npm run build && npm pack --pack-destination /tmp
-node benchmarks/prepare-demo.mjs ../capacitor-live-updates-demo /tmp/baseline/with with /tmp/hotcodepush-capacitor-live-updates-0.0.0.tgz
+node benchmarks/prepare-demo.mjs ../capacitor-live-updates-demo /tmp/baseline/with with /tmp/hotcodepush-capacitor-live-updates-*.tgz
 node benchmarks/prepare-demo.mjs ../capacitor-live-updates-demo /tmp/baseline/without without
 node benchmarks/measure-size.mjs /tmp/baseline/with
 node benchmarks/measure-size.mjs /tmp/baseline/without

@@ -1,11 +1,11 @@
 {
   "name": "@hotcodepush/capacitor-live-updates",
-  "version": "0.0.0",
-  "description": "Capacitor live updates by HotCodePush: the plugin that delivers over-the-air updates to your Capacitor app",
+  "version": "0.0.1",
+  "description": "Capacitor live updates by HotCodePush: the plugin that delivers over-the-air (OTA) updates to your Capacitor app",
   "type": "module",
   "license": "MIT",
   "author": "Genz IT Solutions GmbH",
-  "homepage": "https://hotcodepush.com/capacitor-live-updates",
+  "homepage": "https://hotcodepush.com/docs/sdks/capacitor",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/hotcodepush-team/capacitor-live-updates.git"
@@ -47,6 +47,7 @@
     "clean": "rimraf ./dist",
     "fmt": "eslint . --fix && prettier --write . && swiftlint --fix --quiet ios",
     "lint": "eslint . && prettier --check . && swiftlint lint --quiet --strict ios",
+    "prepublishOnly": "npm run build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "verify": "npm run lint && npm run typecheck && npm test && npm run build",
