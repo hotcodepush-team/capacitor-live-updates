@@ -27,8 +27,7 @@ The simulator app grows by about 3.4 MB, nearly all of it in the `App` binary: t
 ## Running it
 
 ```sh
-npm run build
-tarball=/tmp/$(npm pack --pack-destination /tmp)
+npm run build && tarball=/tmp/$(npm pack --pack-destination /tmp)
 node benchmarks/prepare-demo.mjs ../capacitor-live-updates-demo /tmp/baseline/with with "$tarball"
 node benchmarks/prepare-demo.mjs ../capacitor-live-updates-demo /tmp/baseline/without without
 node benchmarks/measure-size.mjs /tmp/baseline/with
