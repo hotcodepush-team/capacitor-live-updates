@@ -84,15 +84,15 @@
   },
   "hotcodepush": {
     "coreAndroid": {
-      "version": "0.2.0",
-      "checksum": "df915251521fcd0b519be9cfe1b5fb1896efb30954e885816573f26bb4a8b142"
+      "version": "0.2.1",
+      "checksum": "c9a28538d858ddef03c6055d3d8647b49de5b67d10dc15bfd493f45437c551a4"
     }
   },
   "publishConfig": {
     "access": "public"
   },
   "dependencies": {
-    "@hotcodepush/protocol": "https://pkg.pr.new/hotcodepush-team/protocol/@hotcodepush/protocol@8600e36"
+    "@hotcodepush/protocol": "^0.1.0"
   },
   "overrides": {
     "xcode": {
