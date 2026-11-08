@@ -6,10 +6,11 @@ Learn more at [hotcodepush.com/capacitor-live-updates](https://hotcodepush.com/c
 ## Installation
 
 `npx hotcodepush init` installs the plugin and wires the build step into both native projects.
-By hand, until the package is on npm, install the preview build pkg.pr.new publishes for every commit on `main`, pinned to a commit:
+By hand, install the plugin and the CLI the native builds call:
 
 ```sh
-npm install https://pkg.pr.new/hotcodepush-team/capacitor-live-updates/@hotcodepush/capacitor-live-updates@<sha>
+npm install @hotcodepush/capacitor-live-updates
+npm install --save-dev hotcodepush
 npx cap sync
 ```
 
