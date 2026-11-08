@@ -167,12 +167,16 @@ class HotCodePushPlugin : Plugin(), CoreListener {
 
     @PluginMethod
     fun setAttributes(call: PluginCall) {
+        val attributes = call.getObject("attributes")
+        if (attributes == null) {
+            call.reject("attributes must be an object")
+            return
+        }
         val changes = mutableMapOf<String, String?>()
-        val data = call.data
-        for (key in data.keys()) {
+        for (key in attributes.keys()) {
             when {
-                data.isNull(key) -> changes[key] = null
-                data.get(key) is String -> changes[key] = data.getString(key)
+                attributes.isNull(key) -> changes[key] = null
+                attributes.get(key) is String -> changes[key] = attributes.getString(key)
                 else -> {
                     call.reject("An attribute value is a string or null: $key")
                     return
