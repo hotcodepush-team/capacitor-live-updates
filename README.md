@@ -30,8 +30,6 @@ Learn more at [hotcodepush.com/capacitor-live-updates](https://hotcodepush.com/c
 | ------ | --------- | ------------ | ---------------------- |
 | 0.x    | 8 and 7   | 15 and later | 6.0 (API 23) and later |
 
-A Capacitor 7 app on CocoaPods raises its deployment target to 15.0 first.
-
 ## Demo
 
 [capacitor-live-updates-demo](https://github.com/hotcodepush-team/capacitor-live-updates-demo) is a Capacitor app with the plugin wired in, built on both platforms and released through the GitHub Action on every merge.
