@@ -103,7 +103,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@hotcodepush/protocol": "^0.1.0"
+    "@hotcodepush/protocol": "^0.2.0"
   },
   "overrides": {
     "xcode": {

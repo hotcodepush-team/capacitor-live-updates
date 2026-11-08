@@ -57,6 +57,15 @@ class HotCodePushPluginTest {
     }
 
     @Test
+    fun shouldRejectSetAttributesWhenItsAttributesAreMissing() {
+        val call = mock(PluginCall::class.java)
+
+        plugin.setAttributes(call)
+
+        verify(call).reject("attributes must be an object")
+    }
+
+    @Test
     fun shouldResolveWithNoDataWhenTheMethodReturnsNothing() {
         mockConstruction(Core::class.java).use {
             loadPlugin()

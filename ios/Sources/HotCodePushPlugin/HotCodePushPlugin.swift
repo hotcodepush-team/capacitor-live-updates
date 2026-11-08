@@ -129,9 +129,12 @@ public class HotCodePushPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func setAttributes(_ call: CAPPluginCall) {
+        guard let attributes = call.getObject("attributes") else {
+            call.reject("attributes must be an object")
+            return
+        }
         var changes: [String: String?] = [:]
-        for (key, value) in call.options ?? [:] {
-            guard let key = key as? String else { continue }
+        for (key, value) in attributes {
             if value is NSNull {
                 changes[key] = .some(nil)
             } else if let value = value as? String {
